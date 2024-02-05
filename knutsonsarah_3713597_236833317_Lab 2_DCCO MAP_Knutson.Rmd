@@ -1,0 +1,266 @@
+---
+title: "Publishable, reproducible map of sample sites"
+output: html_notebook
+---
+
+# Background
+
+Today we are going to use R to aggregate geospatial data of several different kinds and make a publishable and reproducible map. The demonstration map has been adapted from one that I made for a publication a few years ago (https://academic.oup.com/auk/article/138/2/ukaa086/6167858). In this project, we examined the effects of sound broadcast treatments on settlement decisions of endangered Marbled Murrelets. Note that because the species is endangered, I have scrambled the coordinates of our study sites (i.e., they're not the real sites we used). The map we are producing is going to have 3 elements:
+
+1. A zoomed-in view of our study area;
+2. A zoomed-out view of the state of Alabama and Mississippi with an extent rectangle for the study area; and
+3. A map legend.
+
+# Zoomed-out map
+
+Let's start by loading the necessary packages for this exercise and bringing in a raw dataset of the sample points. Note that by loading the data file onto GitHub I am able to read the file straight from the cloud. This helps make the document fully reproducible because all I need is access to the script and it automatically brings in the data for me from the internet.
+```{r}
+require(tidyverse)
+require(sf)
+require(tigris)
+require(geodata)
+require(terra)
+require(colorspace)
+require(tidyterra)
+require(ggnewscale)
+require(cowplot)
+```
+
+
+
+```{r}
+#STEP 1:every time you are working with code that uses packages, run those packages first when you open r.
+
+#STEP 2: Bringing in DCCO habitat raster. if this were a shapefile, we would use "st_read()"instead of "rast()"
+dcco = rast("C:/Users/jjv0016/OneDrive - Auburn University/Teaching/Spatial Ecology/Lab2/Submissions/knutsonsarah_3713597_236833328_bDCCOx_CONUS_HabMap_2001v1/bDCCOx_CONUS_HabMap_2001v1.tif")
+
+#STEP 3:Bring in shapes of MS and AL. in line 37, we name it. in line 38, we tell it to pull up mississippi and ("|"= "or") Alabama
+msAl = states() %>% 
+  filter(NAME=='Mississippi' | NAME=='Alabama')
+
+#STEP 4: Make sure shape is in the same projection as dcco (the raster file. we bring whatever we are working with to the coordinate type(projection) of the raster file, since raster files are more cumbersome)
+  #first, we redefine msAl "msAL=". after this line is run, "msAl" will be the     ms and al shapefile just reprojected
+  #second, we are telling r to transform a shapefile projection(aka, the ms and     shapes "st_transform(msAL)" to the raster's projection "st_crs(dcco"))
+          #*if we wanted to reproject rasters, we use "project()"***
+msAl = st_transform(msAl, st_crs(dcco))
+
+#STEP 5:crop the raster points (currently for whole US) to just what we need for our study (to msAL states).
+  #after line 49 runs, "dcco" will be the raster file cropped to "msAL")
+dcco = crop(dcco, msAl)
+
+
+#STEP 6: we plot the newly cropped raster file (line 53)(spatial raster element) AND the msAl shapefile (Spatial vector element)  (line 55)
+plot(dcco)
+      #in line 55 we plot the ms and al shapefiles, but we only want their           geometry(aka their outlines)"st_geometry(msAl)"; however, if we were to        only run that, it would not keep the raster we plotted in line 53. 
+      #to tell R that we want BOTH plotted we add "add=T"(aka: 'add=TRUE' the        default is 'add=FALSE', and that would not keep the former plot)
+plot(st_geometry(msAl), add=T)
+
+```
+
+
+
+```{r}
+#STEP 7: load in another file! this one is a shape file (spatial vector element), so we use "st_read()"   when pulling from computer files, dont forget to change forwardslashes to backslashes!
+Ponds = st_read("/vsicurl/https://github.com/SKnuts/Knutson-Spatial-Ecology/raw/main/Sample_Catfish_Farms.shp")
+#below, you can see information about the file, including the projection
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds")
+```
+```{r}
+#looks great!, but now we need to convert the projection of this shapefile to the raster! In general, it is much faster to reproject shapefiles than raster files, especially large raster files.
+Ponds = st_transform(Ponds, st_crs(dcco))
+
+#When I crop the data, the function crops the raster by the extent of the shape object (the bbox), but I would rather get rid of the values outside of the state boundaries. To do that, I can mask values that are not located inside of the shapefile. This just gives NA values to anything not located within the shape.
+  #after line 76, "dcco" is the raster data for only MS and AL 
+dcco = mask(dcco, msAl)
+#now lets plot the new dcco raster, and my ponds shapefile. 
+plot((dcco),col = 'transparent', border = 'black')
+
+# Plot the raster file and state shapes
+plot(dcco)
+plot(st_geometry(msAl), add = TRUE)
+
+# Plot the Ponds shapefile
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds",  add = TRUE)
+
+```
+We are also going to need a spatial object that shows the extent of the area encompassed by our points so that we can plot it on our zoomed out map. To do that we first extract the x and y min and max for the bounding box (bbox) of the spatial points in our study area (so a minimum and maximum points). Next we'll add 2 km to each dimension so that the bounding box is not pressed right up against our points (just makes visualization difficult). Finally, we'll convert it into a spatial object that we can plot (basically, gives an outline of our study area).
+```{r}
+
+#Extract x and y coordinates of the bounding box
+studyArea = st_bbox(Ponds)
+studyArea
+
+#Let's add 2000 m to each dimension
+studyArea = studyArea + c(-2000, -2000, 2000, 2000)
+studyArea
+
+#And now we convert it to a spatial sfc object
+studyArea = st_as_sfc(studyArea)
+
+# Plot the raster file and state shapes
+plot(dcco)
+plot(st_geometry(msAl), add = TRUE)
+
+# Plot the Ponds shapefile
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds", add = TRUE)
+plot((studyArea),col = 'transparent', border = 'red', add = TRUE)
+```
+One of the downsides of working with high-resolution rasters, however, is that you can end up with a TON of cells, and thus a ton of data which can slow down or crash R. It can also take a very long time to render images with lots of cells. Because this is just for visualization purposes (and not for analysis), we are going to re-aggregate this raster at a coarser resolution to make it easier on ourselves. we will take the means, greater than 0.3(aka >30% of the cell was old growth)
+
+```{r}
+dccoCoarse = aggregate(dcco, fact=3, fun="mean", labels = FALSE)
+plot(dccoCoarse)
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds", add = TRUE)
+plot((studyArea),col = 'transparent', border = 'red', add = TRUE)
+plot(st_geometry(msAl), add = TRUE)
+
+```
+
+ let's zoom in on our study region.
+```{r}
+studyAreaHab = crop(dccoCoarse, studyArea)
+plot((studyAreaHab), col = "tan")
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds", add = TRUE)
+plot((studyArea),col = 'transparent', border = 'red', add = TRUE)
+plot(st_geometry(msAl), add = TRUE)
+
+```
+
+Let's reclassify this raster so that instead of 0 and 2 values, we are identifying the cells as wintering habitat or not wintering habitat.
+
+```{r}
+tmp = data.frame('ID' = c(0, 2), 'category' = c(NA, 'Winter Habitat'))
+tmp
+og = categories(dccoCoarse, value=tmp)
+
+plot((og), col='tan')
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds", add = TRUE)
+plot((studyArea),col = 'transparent', border = 'red', add = TRUE)
+plot(st_geometry(msAl), add = TRUE)
+```
+```{r}
+tmp = data.frame('ID' = c(0, 2), 'category' = c(NA, 'Winter Habitat'))
+tmp
+ogzoom = categories(studyAreaHab, value=tmp)
+plot((ogzoom), col = "tan")
+
+plot(st_geometry(Ponds), col = "blue", main = "Catfish Ponds", add = TRUE)
+plot((studyArea),col = 'transparent', border = 'red', add = TRUE)
+plot(st_geometry(msAl), add = TRUE)
+```
+
+
+# Make a nice map
+
+Now that we have created all of our rasters and shapefiles, we can put it together with ggplot to make a map. First, we need to make sure that all of our layers are in the same reference system (make sure all projections are the same (utms for this instance).
+
+lets recap what we have
+  -studyAreaHab: is dccoCoarse raster data restricted to study area
+  -ogzoom: is studyAreaHab+legend labels
+  -ponds: sf of ponds
+  -msAL: sfc of alabama and mississippi
+```{r}
+
+crs(dccoCoarse, proj=T)
+crs(ogzoom, proj=T)
+crs(studyAreaHab, proj=T)
+crs(msAl)
+crs(Ponds, proj=T)
+crs(og, proj=T)
+st_crs(studyAreaHab)$proj4string
+```
+
+
+
+
+Now to put the two maps in ggplot, starting with the zoomed-out map then the study area zoomed in map.
+
+```{r}
+zoomedOut = ggplot()+
+  geom_raster(data = og, aes(x = x, y = y, fill=category)) +
+  scale_fill_manual(values = c('black'), na.value='tan')+
+  new_scale_fill()+
+  # geom_sf(data = tmp, fill=NA)+
+  geom_sf(data = Ponds, color = 'blue') +
+  new_scale_fill()+
+  geom_sf(data = studyArea, fill = 'transparent', color = 'red')+
+  geom_sf(data = msAl, fill = 'transparent')
+zoomedOut
+  
+```
+Now let's just clean this up a bit.
+
+```{r}
+zoomedOut = zoomedOut +
+  theme_bw()+ #Gets rid of most of the colors
+  theme(panel.grid=element_blank(), #Removes the gridlines
+        axis.text=element_blank(), #Removes the axis text
+        axis.ticks=element_blank(), #Removes the axis tick marks
+        panel.border=element_blank()) #Removes the frame around the graph
+
+zoomedOut
+```
+Now let's make our zoomed-in map. 
+
+```{r}
+
+tmp = st_intersection(msAl, studyArea)
+
+zoomedIn = ggplot() +
+  geom_raster(data = ogzoom, aes(x = x, y = y, fill=category)) +
+  scale_fill_manual(values = c('black'), na.value='tan', name= 'Predicted Habitat')+
+  new_scale_fill()+
+  geom_sf(data = tmp, fill=NA)+
+  geom_sf(data = Ponds, color = 'blue') +
+  new_scale_fill()+
+  geom_sf(data = studyArea, fill = 'transparent', color = 'red')
+
+zoomedIn
+```
+
+
+```{r}
+
+plot_grid(zoomedOut, zoomedIn, ncol=1, rel_heights=c(0.5, 1))
+
+```
+
+
+
+```{r}
+zoomedIn = zoomedIn+
+  new_scale_fill()+
+  theme_bw()+
+  theme(panel.grid=element_blank(),
+        axis.text.x=element_text(angle=90, vjust=0.5, size=6))
+
+zoomedIn
+  
+```
+pull the legend out of a ggplot figure and treat it as its own element so I can delete it (line 245).
+
+```{r}
+legend = get_legend(zoomedIn)
+ggdraw(legend)
+zoomedIn = zoomedIn + theme(legend.position='none')
+```
+Let's first stick the zoomed-out map on top of the legend. Note that I am specifying that I want the zoomed-out map to be 60% of the height of the legend.
+
+```{r}
+supportingFig = plot_grid(zoomedOut, ggdraw(legend), ncol=1, rel_heights = c(0.6, 1))
+
+supportingFig
+```
+
+
+stitch it all together
+
+```{r}
+plot_grid(zoomedIn, supportingFig, rel_widths=c(1, 0.9))
+```
+Fig 1. A map depicting the study area of a project quantifying double-crested cormorant (Nannopterum auritum) (hereafter cormorant) predation on catfish farms in West Alabama and East Mississippi. I fly aerial surveys to count and locate cormorants, then my team and I collect cormorants and identify stomach contents. This information combined with other farm information will be used in the economic analysis portion of the study. The catfish farms are the blue shapes I composed of ponds that I digitized in a shapefile using ArcGIS pro. The ponds are where I collect data. The farms are chosen from a random subset of active farms in the region. I overlayed a habitat distribution map over the pond study sites to show areas where cormorants are predicted to occur. The map comes from the U.S. Geological Survey's Gap Analysis Project, and it is important to note that it was created by applying a deductive habitat model to remotely-sensed data from cormorant's known range based on 2001 ground conditions. Therefore, the current ground conditions (and thus predicted occupancy) have likely changed since the distribution map's creation; however, it was the most current data I could find for my purposes. My goal is to help understand why I am seeing more cormorants on certain farms/groups of farms when some farms of equal size do not seem to have as many cormorants on them. I additionally pulled the shapes of Mississippi and Alabama from R and overlayed them for spatial reference.
+
+# Grade
+
+$\color{red}{\text{Great work, Sarah. My only complaint is that you have the legend on there twice, so I knocked off half a point. Otherwise, excellent.}}$
+
