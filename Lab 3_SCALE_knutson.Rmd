@@ -103,7 +103,7 @@ Answer Challenge 1 with your written text here.
    as you scale up the grain size, the variance tends to decrease, but the mean Raster Values stay about the same.
   Variance is a measure of how spread out a set of values is.  We are scaling up by taking the means, so the total mean of the rasters should stay about the same; however, the raster will be composed of fewer and fewer cells that are the average of the cells before them, so the values become more similar, and less spread out. It is like inbreeding, but for statistics.
 
-
+$\color{red}{\text{Inbreeding for statistics... I like the analogy.  +4}}$
 
 
 
@@ -186,7 +186,7 @@ Answer Challenge 2 with your written text here.
   B)Do you see a similar pattern? Compare and contrast your findings with those from Challenge 1.
       -I saw a similar pattern in the variance; however, the means of the raster in which we used mode to increase grain size do not seem to have a pattern it starts at 5, then dips to ~3.75 for grain size 5, then increases again for 10 and 15 grain size. I think this is because mode takes the value that appears most frequently in when aggregating the surrounding cells. It has fewer and fewer cells to take the mode of, and in some instances, one value may not show up any more than any of the others. I am not sure how R chooses the mode in that instance. I am not sure I can explain this mathematically, but it seems like when you upload a video, download it, upload it, download it, upload it, and download it again. The original image has become distorted. 
 
-
+$\color{red}{\text{Nice! +4}}$
 
 
 
@@ -200,7 +200,7 @@ Answer Challenge 2 with your written text here.
 **Recall that before we calculated forest cover, we cropped our NLCD raster to minimize its size and the computing effort necessary from our poor little computers. How might that affect our ability to evaluate the scale at which five-lined skinks respond to forest cover? Why?**
 First we essentially cropped the data into forest/non-forest habitat, but there may be other land cover variables that influence skink presence/absence such as open water (rather like the edge around these areas) or low intensity developed. Skinks may occur at higher densities or require less home range around some areas, so the scale at which skinks respond to forest cover might be different. If we are talking about cropping to the buffer zones(1km, 5km, etc) at which we were evaluating skink response to forest cover, there may be certain factors just outside the buffer zones that impact responsiveness. this would throw off estimates of effect since they are not included in the zone.
 
-
+$\color{red}{\text{Mostly right. What I was looking for is that we simply can't accurately explore scales greater than 10 km when we crop at 10 km because our buffers around our points will start creeping into areas for which we don't have data. +1.5}}$
 
 
 
@@ -325,7 +325,7 @@ What patterns do you notice in correlation among these variables?
 -The larger the radius, the larger the correlation, especially between it and the last radius (5km has a proportionally larger correlation to 4km than 3km and 2 km for example).
 
 
-
+$\color{red}{\text{Nice. Note that in general, variables that are further apart from one another are less correlated. +4}}$
 
 
 ## Challenge 5 (4 points)
@@ -378,7 +378,7 @@ Place your answer to the questions here.
   since all the beta values are greater than 0, I would say that skink presence responds with positive correlation to forest cover. the highest beta values occur between 2km and 5km.
       
       
-      
+$\color{red}{\text{Nice! +4}}$      
       
   
 ## Challenge 6 (2 points)
@@ -390,3 +390,5 @@ I am really not a math person, and statistics is hard enough to understand, let 
 
 It might would be okay to include two covariates if we expect each have an effect and give unique information for what we are studying.
 If we are trying to detect scale at which forest cover affects skink presence (the primary question), presence of water and low-intensity development might be two confounding factors and may be important to include as covariates. incorporating these covariates may shed light on issues such as spatial autocorrelation occuring between the different scales we are looking at.
+
+$\color{red}{\text{Awesome. We'll talk more in class, but you just want to be care ful that you don't include two covariates that are highly correlated with one another in the same model. Condensing to a few variables could be based on any numer of things (both statistical and biological, as you've focused on here). +2}}$
