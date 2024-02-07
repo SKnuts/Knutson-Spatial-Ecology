@@ -491,30 +491,40 @@ it gets more fuzzy and less granular.
 
 ```{r}
 #vossModel1
-  vossModel1enn = lsm_l_enn_mn(vossModel1)
-PatchCohesion.1 <- vossModel1enn$value
-  vossModel1enn
-  vossModel1core = lsm_l_cohesion(vossModel1)
-  vossModel1core
-  vossModel1coehesion = lsm_c_core_mn(vossModel1)
-  vossModel1coehesion
+vossModel1 = voss2d(g=7, H=0.1) 
+vossModel1 = rast(vossModel1$z)
+  plot(vossModel1)
+  threshold30.1 = quantile(as.matrix(vossModel1), prob=0.3)
+  voss30.1 = ifel(vossModel1 > threshold30, 0, 1)
+  plot(voss30.1)
+  
+  vossModel1enn = lsm_l_enn_mn(voss30.1)
+    plot(vossModel1enn)
+  vossModel1core = lsm_l_cohesion(voss30)
+    plot(vossModel1core)
+  vossModel1coehesion = lsm_c_core_mn(voss30)
+    plot(vossModel1coehesion)
+  
 #vossModel12
+     threshold30 = quantile(as.matrix(vossModel2), prob=0.3)
+  voss30 = ifel(vossModel2 > threshold30, 0, 1)
+  plot(voss30)
   vossModel2enn = lsm_l_enn_mn(vossModel2)
-  vossModel2enn
+  plot(vossModel2enn)
   vossModel2core = lsm_l_cohesion(vossModel2)
-  vossModel2core
+  plot(vossModel2core)
   vossModel2coehesion = lsm_c_core_mn(vossModel2)
-  vossModel2coehesion
+  plot(vossModel2coehesion)
 #vossModel3
   vossModel3enn = lsm_l_enn_mn(vossModel3)
-  vossModel3enn
+  plot(vossModel3enn)
   vossModel3core = lsm_l_cohesion(vossModel3)
-  vossModel3core
+  plot(vossModel3core)
   vossModel3coehesion = lsm_c_core_mn(vossModel3)
-  vossModel3coehesion
+  plot(vossModel3coehesion)
 #vossModel4
   vossModel4enn = lsm_l_enn_mn(vossModel4)
-  vossModel4enn
+  plot(vossModel4enn)
   vossModel4core = lsm_l_cohesion(vossModel4)
   vossModel4core
   vossModel4coehesion = lsm_c_core_mn(vossModel4)
@@ -556,17 +566,10 @@ PatchCohesion.1 <- vossModel1enn$value
   vossModel9coehesion
   
   
-  
-  
-  # Data Frame to Plot
-LandscapeCohesion <- data.frame(
-  HValue = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-  CohesionValues = c(PatchCohesion.1, PatchCohesion.2, PatchCohesion.3,
-                 PatchCohesion.4, PatchCohesion.5, PatchCohesion.6,
-                 PatchCohesion.7, PatchCohesion.8, PatchCohesion.9)
+
   
 )
 ```
 
-Place your text here.
+I chose these because i wanted to see what they would look like 
 
