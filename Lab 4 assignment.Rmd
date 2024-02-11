@@ -91,6 +91,7 @@ PerformanceAnalytics::chart.Correlation (BIG3, histogram = TRUE, method = c("pea
 ```
 metrics dealing with area and perimeter such as perim, shape, area, and core are all very correlated. measures dealing with the shape, such as shape, perimiter, gyrate, frac, and contig are also very correlated to one another. some metrics such as contig and para are strongly negatively correlated. Para and enn have negative correlations to all other metrics except each other. This informs me that, while metrics may measure things in different ways and tell different aspects about the data, many overlap significantly in the core of their measurement/output.
 
+$\color{red}{\text{Perfect! +4}}$
 
 ____________________________________________________________________________________________________________________________
 
@@ -167,6 +168,7 @@ Rook = patches(forest, directions=4, zeroAsNA=T, allowGaps=F)
   the standard deviation and mean area are smaller for the Rook than the queen;the nearest neighbor distance changed in two instances on the Rook. the total edge length did not change. the number of patches increased for the Rook to 67 (Queen was 49)
 Queen would be most appropriate for species that are more mobile, as it looks at patches on the diagonal(ie, only touches the main patch in a corner). the Rook would be best used for species that are less mobile.
 
+$\color{red}{\text{Mean patch size should have been smaller in rook compared to queen as well. +3.5}}$
 
 
 
@@ -252,6 +254,7 @@ classCats = data.frame('class' = c(1, 2, 3, 4, 5, 6),
 First, I make sure i am comparing 2001 to 2019 via listed order for each metric respectively(so make sure I am comparing 2001 total amount of cover(ca) values to 2019 ca values, 2001 mean patch area values within classes(area_mn) to 2019 area_mn, 2001 mean distance to nearest neighbor between patches within classes (enn_mn) to 2019 enn_mn values). comparing these respectively, I look at the values column to know covertype (ex: class 3 is Barren) and look at the associated value *(or be fancy and do code to make the categories to show up-classcats)*.
 for example the total amount of Barren cover(3) increased from 22.32 hectares in 2001 to 181.71 hectares in 2019. this provides a quantitative change in the cover between years.
 
+$\color{red}{\text{I'd like to see you give a bit more about exactly what the changes were in the various categories}}$
 
 
 **Quantify these changes at the landscape level by calculating and reporting on changes in the (1) Shannon diversity and (2) Shannon evenness of the landscapes at the different time points. Give a short description of how you interpret the changes in these values.**
@@ -271,7 +274,7 @@ The SHEI was larger for 2019(.75) than 2001(.53), indicating that the cover in 2
 
 
 
-
+$\color{red}{\text{Nice job overall. +3}}$
 
 ______________________________________________________________________________________________________________________________
 
@@ -398,21 +401,21 @@ As the %cover increases, it fills up like flooding terrain. The water(green)fill
 
 TotAreaClassD <- data.frame(
 Threshold = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-TotAreaclass= c(TotAreaL10, TotAreaL20, TotAreaL30,
-                 TotAreaL40, TotAreaL50, TotAreaL60,
-                 TotAreaL70, TotAreaL80, TotAreaL90)
+TotAreaclass= c(TotAreaL10$value[2], TotAreaL20$value[2], TotAreaL30$value[2],
+                 TotAreaL40$value[2], TotAreaL50$value[2], TotAreaL60$value[2],
+                 TotAreaL70$value[2], TotAreaL80$value[2], TotAreaL90$value[2])
 )
 classCoehesionD <- data.frame(
 Threshold = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-classCoehesion = c(coehesionC10, coehesionC20, coehesionC30,
-                 coehesionC40, coehesionC50, coehesionC60,
-                 coehesionC70, coehesionC80, coehesionC90)
+classCoehesion = c(coehesionC10$value[2], coehesionC20$value[2], coehesionC30$value[2],
+                 coehesionC40$value[2], coehesionC50$value[2], coehesionC60$value[2],
+                 coehesionC70$value[2], coehesionC80$value[2], coehesionC90$value[2])
   )
 classMeanCoreD <- data.frame(
 Threshold = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-classMeanCore = c(meancoreC10, meancoreC20, meancoreC30,
-                 meancoreC40, meancoreC50, meancoreC60,
-                 meancoreC70, meancoreC80, meancoreC90)
+classMeanCore = c(meancoreC10$value[2], meancoreC20$value[2], meancoreC30$value[2],
+                 meancoreC40$value[2], meancoreC50$value[2], meancoreC60$value[2],
+                 meancoreC70$value[2], meancoreC80$value[2], meancoreC90$value[2])
 )
 
 # Plotting total area vs threshold
@@ -445,6 +448,7 @@ COHESION is an 'Aggregation metric'. It characterises the connectedness of patch
 CORE_MN is a 'Core area metric' and equals the mean of core areas of all patches belonging to class i. The core area is defined as all cells that have no neighbor with a different value than themselves (rook's case)
 
 
+$\color{red}{\text{Your code above wasn't working, so I had to make some changes. I'd also like to see you provide more of a description of how these values change with the threshold value. +3}}$
 
 ____________________________________________________________________________________________________________________________
 
@@ -573,3 +577,4 @@ vossModel1 = rast(vossModel1$z)
 
 I chose these because i wanted to see what they would look like 
 
+$\color{red}{\text{I see you struggled with this one. Feel free to come see me if you'd like to review how to fix this code up. +2}}$
