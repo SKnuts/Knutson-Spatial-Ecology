@@ -1,0 +1,169 @@
+---
+title: "Lab 5 assignment - Point pattern analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+require(spatstat)
+require(tidyverse)
+require(terra)
+```
+
+
+# Challenge 1 (3 points)
+
+-Create a simulation window on a landscape stretching from 0 to 100 units in both the x and y directions. 
+-simulate the distribution of an organism on this landscape using a Poisson process with a lambda value of 0.01. Plot this organism's distribution. 
+(A)How many organisms are there on your landscape? (B)What is the expected number of organisms that you should find on this landscape based on your simulation parameters? (B1)Why?
+
+```{r}
+SimWindow = owin(xrange = c(0, 100), yrange = c(0, 100))
+plot(SimWindow)
+#Choose your favorite number and set the seed here.
+set.seed(42)
+SimDist = rpoispp(lambda = (0.01), nsim=1, win=SimWindow)#one simulation of a Poisson distribution in which individuals occur at an average rate (lambda = (0.01))per unit space. within the previously defined 100x100 window.
+plot(SimDist)
+summary(SimDist)
+```
+  (A)there are 113 individuals on the landscape
+  (B)there should be around 100 individuals
+    (B1) Lambda is the rate at which individuals are occurring on the simulated landscape. we set it equal to 0.01.
+        the landscape is 100x100 units. Area=1,000
+        lambda (0.01)x area (10,000) = number of individuals(100)
+        HOWEVER. poisson process is a random process, so it will not be exactly 100 every time
+        
+        
+______________________________________________________________________________________________________________________________________________________________________________________________
+# Challenge 2 (3 points)
+
+Verify that there no (A)linear or quadratic pattern in the distribution of your organisms using fitted Poisson process models. Show the outcome of this analysis and explain your conclusion.
+
+```{r}
+LinearDist = ppm(SimDist, ~ x + y) #assumes intensity (rate at which individuals occur) is a linear function of x and y, resulting in linear distribution
+QuadratDist = ppm(SimDist, ~polynom (x, y, 2))#assumes quadratic trend in the distribution
+SimDistNA = ppm(SimDist, ~1) #models distribution as a function of nothing, assumes homogenous distribution 
+data.frame(model = c('Linear', 'Quadratic', "NA"),
+ AIC = c(AIC(LinearDist), AIC(QuadratDist), AIC(SimDistNA)))
+```
+ There appears to be no linear or quadratic pattern in the distribution of organisms since "NA" has the lowest value among the other models. The AIC values indicate that the model that is best for the data is the one assumes homogenous distribution.  This is the outcome I expected since we specified an even intensity in the initial landscape- thus, the distribution of individuals should even.
+
+
+
+
+
+
+________________________________________________________________________________________________________________________________________________________________________________________________________
+# Challenge 3 (14 points)
+
+I have simulated the distributions of 2 critters and provided their x-y coordinates. One of them is a non-territorial predator. The second is a critter that is preyed upon by the predator and exhibits a fear response to the predator's presence. Use the tools you learned in the lab to explore the distributions of these two critters. Identify which one is the predator and which is the prey, and provide code and a thorough justification supporting your conclusion.
+
+
+```{r}
+critter1 = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week5/species1.csv') %>% 
+  mutate(org = 'critter1')
+    predPreyWin = owin(xrange = c(0, 100), yrange = c(0, 100))
+    head(critter1)
+    pppcritter1 = ppp(x=critter1$x, y=critter1$y, window = predPreyWin)
+  plot(pppcritter1)
+
+
+critter2 = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week5/species2.csv') %>% 
+  mutate(org = 'critter2')
+        pppcritter2 = ppp(x=critter2$x, y=critter2$y, window = predPreyWin)
+  plot(pppcritter2)
+
+```
+```{r}
+#since one is a non-territorial predator, I would not expect repulsion within one of the critters, but the prey would exibit repulsion to the predators. The prey may be social and may exhibit clustering. My first step is to just see what is ocurring between points for each critter- see if the points conform to complete spatial randomness with a chi-square test(compares observed frequency of points to expected random frequency {for categorical variables}).
+ 
+ChiCritter1 = quadratcount(pppcritter1, nx=4, ny=4)
+plot(pppcritter1)
+plot(ChiCritter1, add=T)
+quadrat.test(pppcritter1, nx=4, ny=4, method='Chisq')
+
+#critter2 Chisquare
+ChiCritter2 = quadratcount(pppcritter2, nx=4, ny=4)
+plot(pppcritter2)
+plot(ChiCritter2, add=T)
+quadrat.test(pppcritter2, nx=4, ny=4, method='Chisq')
+
+#the chi-square test yields a significant p-value for critter1(0.03) but not for critter2(0.2). this indicates that there is significant association between the points of critter1, but it does not tell us  I suspect that critter1 is the prey, but lets run more tests to be sure...
+```
+```{r}
+#we know that there is association between points of critter1, but is it repulsion or clustering? Ripley's K and L will look at the expected number of points within r distance to each point (so like cumulative nearest neighbor distance) and tell us the answer to this. if the black line is below the red line, there is repulsion If the black line is above the red line, then there is clustering
+#Critter 1
+  #Ripley's L
+    Lpppcritter1 = Lest(pppcritter1, correction='none') #red line is what we would expect if randomly placed, black is our data
+      #Increases with radius
+    plot(Lpppcritter1, .-r~r)
+    LTransCritter1 = Lest(pppcritter1, correction='translate')
+    plot(LTransCritter1, .-r~r)
+#Critter 2
+  #Ripley's L
+    Lpppcritter2 = Lest(pppcritter2, correction='none') #red line is what we would expect if randomly placed, black is our data
+      #Increases with radius
+    plot(Lpppcritter2, .-r~r)
+    LTransCritter2 = Lest(pppcritter2, correction='translate')
+    plot(LTransCritter2, .-r~r)
+  
+  #this indicates that there is a degree of clustering up to ~13 units distance from other individuals, but then it drops sharply and demonstrates repulsion around 20r in Critter1's dispersion. Critter2's dispersion is roughly what we would expect for random dispersal  __________________________________________
+
+    
+    
+    
+  #to double-check this assertion...
+    
+    
+  SimCritter1 = envelope(pppcritter1, Lest, nsim=200, rank=1, correction='translate', global=F)#we created 200 simulations from a random point process and compare to our line. global=F tells that we want it for each point, not just a sum.
+plot(SimCritter1, .-r~r, shade=c('hi', 'lo'), legend=F)
+
+  SimCritter2 = envelope(pppcritter2, Lest, nsim=200, rank=1, correction='translate', global=F)#we created 200 simulations from a random point process and compare to our line. global=F tells that we want it for each point, not just a sum.
+plot(SimCritter2, .-r~r, shade=c('hi', 'lo'), legend=F)
+    
+
+### Critter2's dispersion falls entirely within within the 300 random simulations, whereas critter 1's clustering is on the upper extent of what we expect up to about 10 units distance (r) to other individuals (sometimes it even falls above it), then it begins to show repulsion and nears the lower margin of what we expect around 25 r.so kind of like a herd. Critter 2's dispersion stays roughly in the middle of the randomly simulated distributions. but we cannot 100% conclude anything yet.
+```
+
+
+
+```{r}
+#we cant conclude anything based on each individual critter alone... but what about their distributions together? prey avoid predators
+Critter1Env = envelope(pppcritter1, Kest, nsim=99, correction="translate", shade=FALSE)
+Critter2Env = envelope(pppcritter2, Kest, nsim=99, correction="translate")
+
+# Plot results
+plot(Lpppcritter1, col='red', main="Ripley's L-function Comparison")
+#plot(Critter1Env,col='green', add=TRUE)
+
+plot(Lpppcritter2, col="blue", add=TRUE)
+#plot(Critter2Env, col="green", add=TRUE, lty=2)
+
+
+
+
+
+#________________________________________________________________________________________________________________
+#**critters one and two's distributions kind of reflect across the expected random line to mirror each other up to a certain point and then parallel each other in dispersal. this information coupled with critter1's clumped distribution at small scales and dispersal at larger scales indicates that Critter 1 is the prey species. Prey species often form groups (safety in numbers), but these groups are spread out, trying to avoid predators. Critter 2's distribution is more random, but teeters on dispersion at smaller scales. This indicates to me that that the predators may be attempting to go to/locate where the prey are clumped.**
+#________________________________________________________________________________________________________________
+```
+
+
+below is unnecessary(gives redundant information), but I want to include this for future reference for myself on how to do an lcross function.
+
+bothCritters = rbind(critter1, critter2)#puts them in the same dataframe
+
+pppCritters = ppp(bothCritters$x, bothCritters$y, window=SimWindow, marks=as.factor(bothCritters$org))
+
+lMulti = envelope(pppCritters, Lcross, nsim=99, rank=1, global=F, i='critter1', j='critter2', simulate = expression(rlabel(pppCritters))) #lcross is used to look at cross-mark ripK&L.  #i=critter1, j=defaults to critter2
+
+plot(lMulti, .-r~r, legend=F)
+
+```
+how far are my 2's away from my 1's
+so there are fewer critter 2's within 10 meters of critter 1s than if critter 2 was random relative to critter1
+#grey is entirely random points (1's and 2's randomly assigned to all points 99 times) (distribution of 1's relative to 2's randomly assigned 99 times)
+
+
+```
