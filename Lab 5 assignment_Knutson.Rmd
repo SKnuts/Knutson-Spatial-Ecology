@@ -36,6 +36,10 @@ summary(SimDist)
         
         
 ______________________________________________________________________________________________________________________________________________________________________________________________
+
+$\color{red}{\text{Perfect. +3}}$
+
+
 # Challenge 2 (3 points)
 
 Verify that there no (A)linear or quadratic pattern in the distribution of your organisms using fitted Poisson process models. Show the outcome of this analysis and explain your conclusion.
@@ -48,6 +52,8 @@ data.frame(model = c('Linear', 'Quadratic', "NA"),
  AIC = c(AIC(LinearDist), AIC(QuadratDist), AIC(SimDistNA)))
 ```
  There appears to be no linear or quadratic pattern in the distribution of organisms since "NA" has the lowest value among the other models. The AIC values indicate that the model that is best for the data is the one assumes homogenous distribution.  This is the outcome I expected since we specified an even intensity in the initial landscape- thus, the distribution of individuals should even.
+
+$\color{red}{\text{Nice. +3}}$
 
 
 
@@ -167,3 +173,5 @@ so there are fewer critter 2's within 10 meters of critter 1s than if critter 2 
 
 
 ```
+
+$\color{red}{\text{Excellent stuff. +14}}$
