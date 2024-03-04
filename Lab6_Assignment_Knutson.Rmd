@@ -29,6 +29,9 @@ ggplot(thebees, aes(x=x, y=y, color=meanBee))+
 ```
 There appears to be a bit of positive spatial dependence in the high and low mean abundance. lower mean bee abundance looks like it occurs more often in the bottom left corner, top right corner and upper left central. Higher mean bee abundances appear more often in the bottom right and left central 
 
+$\color{red}{\text{Excellent. +2}}$
+
+
 
 ______________________________________________________________________________________________________________
 # Challenge 2 (3 points)
@@ -68,6 +71,9 @@ plot(empGeorbees, envelope=empEnvbees)
 ```
 
 in the correleogram, we see evidence of positive 0-20 meters, negative spatial dependence between 25-50 meters and after 80 meters, and then evidence of positive spatial dependence after 80 meters. In the variogram.
+
+$\color{red}{\text{In the variogram, you're actually seeing evidence that variance among points > 80 m apart is greater than would be expected by chance, indicating negative spatial dependence. +2.5}}$
+
 
 
 _____________________________________________________________________________________________________________________________________________________________________
@@ -133,6 +139,9 @@ plot(empGeorbeeslm, envelope=empEnvbeeslm)
 ```
 the intercept and average bee abundance appear to be the same (13.93). this is because there are no other independent variables in this model, and the intercept is representing the mean abundance. this suggests that the lm is not seeing variability in the abundance other than what is represented by the bee mean average.
 
+$\color{red}{\text{And what about the similarities/differences between the correlogram and variogram produced here vs. the one produced in the previous challenge? +3}}$
+
+
 # Challenge 4 (4 points)
 
 Conventional wisdom indicates that the distribution of floral resources may substantially influence bee abundance. In addition, I am  completely making up the following fact: the average bee has a perceptual range of about 15 m. Below I have provided code for importing a raster that shows the number of flowers counted in 1 m grid cells across the entire study area. Use the focal() function from the previous lab to generate a new raster in which each cell value represents the mean number of flowers in cells within a 15 m radius. Plot the distribution of the blue vane traps over the 15 m focal raster. No text required here, just show me the plot.
@@ -159,6 +168,9 @@ ggplot() +
        x = "X Coordinate", y = "Y Coordinate") +
   theme_minimal()
 ```
+
+$\color{red}{\text{Good. +4}}$
+
 
 # Challenge 5 (4 points)
 
@@ -204,6 +216,9 @@ plot(empGeorflowerlm, envelope=empEnvflowerlm)
 ```
 the variogram and the correlogram of the flower residuals indicate that the data falls within what would be expected if random.
 
+$\color{red}{\text{Be clear with your words here. We're talking about if the residuals were randomly distributed in space. +4}}$
+
+
 
 ____________________________________________________________________________________________
 # Challenge 6 (3 points)
@@ -211,3 +226,6 @@ ________________________________________________________________________________
 What is your assessment regarding the distribution of bee abundance in this study area? Does it exhibit spatial dependence, and if so, what is driving that pattern?
 
 It seems as if there is some spatial dependence of the bees within about 20 meters; however, this is explained by the flower distribution.
+
+$\color{red}{\text{Specifically, there is spatial aggregation in the flowers, the bees are responding to the flowers, so there is spatial aggregation in the bees. But, if we model the effect of flowers, then the residual abundance is randomly distributed. +2.5}}$
+
