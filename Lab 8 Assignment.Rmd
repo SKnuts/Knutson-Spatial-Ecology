@@ -1,0 +1,346 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+require(tidyterra)
+require(dismo)
+require(tidyverse)
+require(terra)
+require(predicts)
+require(ggnewscale)
+require(mgcv)
+require(randomForest)
+require(maxnet)
+require(enmSdmX)
+require(gbm)
+```
+
+
+
+# Challenge 1 (4 points)
+
+In the lab, we created 6 species distribution models (SDMs) for the same species using 6 different techniques. Plot the maps generated from (1) the bioclim envelope function, (2) the GLM model, and (3) the random forest model next to one another. What similarities and differences do you notice among these maps? What might explain some of these differences?
+
+```{r}
+vathData = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_2004.csv')
+
+vathPres = vathData %>% filter(VATH==1)
+vathAbs = vathData %>% filter(VATH==0)
+
+vathPresXy = as.matrix(vathPres %>% select(EASTING, NORTHING))
+vathAbsXy = as.matrix(vathAbs %>% select(EASTING, NORTHING))
+
+vathVal = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_VALIDATION.csv')
+
+vathValPres = vathVal %>% filter(VATH==1)
+vathValAbs = vathVal %>% filter(VATH==0)
+
+vathValXy = as.matrix(vathVal %>% select(EASTING, NORTHING))
+vathValPresXy = as.matrix(vathValPres %>% select(EASTING, NORTHING))
+vathValAbsXy = as.matrix(vathValAbs %>% select(EASTING, NORTHING))
+
+elev = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/elevation.tif')
+canopy = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/canopy.tif')
+mesic = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/mesic.tif')
+precip = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/precip.tif')
+
+crs(elev) = crs(mesic)
+crs(canopy) = crs(mesic)
+
+
+mesic = resample(x = mesic, y = elev, 'near')
+precip = resample(x = precip, y = elev, 'bilinear')
+
+mesic = mask(mesic, elev)
+precip = mask(precip, elev)
+
+probMatrix = focalMat(mesic, 1000, type='circle', fillNA=FALSE)
+mesic1km = focal(mesic, probMatrix, fun='sum')
+
+layers = c(canopy, elev, mesic, mesic1km, precip)
+names(layers) = c('canopy', 'elev', 'mesic', 'mesic1km', 'precip')
+plot(layers)
+
+set.seed(23)
+
+backXy = data.frame(backgroundSample(layers, n=2000, p=vathPresXy))
+
+
+presCovs = extract(layers, vathPresXy)
+backCovs = extract(layers, backXy)
+valCovs = extract(layers, vathValXy)
+
+presCovs = data.frame(vathPresXy, presCovs, pres=1)
+backCovs = data.frame(backXy, backCovs, pres=0)
+valCovs = data.frame(vathValXy, valCovs)
+
+presCovs = presCovs[complete.cases(presCovs),]
+backCovs = backCovs[complete.cases(backCovs),]
+valCovs = valCovs[complete.cases(valCovs),]
+
+
+backCovs = backCovs %>% select(-ID)
+colnames(presCovs)[1:2] = c('x', 'y')
+
+presBackCovs = rbind(presCovs, backCovs)
+
+
+
+
+
+#_______________________________________________________
+# Envelopes
+tmp = presCovs %>% select(elev, precip, mesic1km, canopy) %>% 
+  as.matrix()
+
+bioclim = envelope(tmp)
+bioclimMap = predict(layers, bioclim)
+#________________________________________________________
+
+# GLMs
+glmModel = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presBackCovs)
+glmMap = predict(layers, glmModel, type='response')
+
+#_________________________________________________________
+
+# Random forests
+tuneRF(y = as.factor(presBackCovs$pres), x=presBackCovs[,3:6], stepFactor = 2, ntreeTry = 500)
+rfModel = randomForest(as.factor(pres) ~ canopy + elev + mesic1km + precip, data=presBackCovs, mtry=2, ntree=500, na.action = na.omit)
+rfMap = predict(layers, rfModel, type='prob', index=2)
+#____________________________________________________
+
+
+par(mfrow = c(1, 3))
+plot(bioclimMap)
+plot(glmMap) 
+plot(rfMap) 
+```
+you can see the same underlying patterns of occupancy with the highest occupancy in a vertical band on the middle left side, but they all predict different degrees of occupancy. 
+The envelope function has distinct areas where there is little to no occupancy and defined areas of higher occupancy. this is likely because it assumes that "suitable" conditions are those that fall within the envelope of all variables. thus the areas that are occupied vs not occupied are very defined.
+the GLM model in comparison to the other two seems to predict much higher occupancy overall, with areas of occupancy in places where there was no occupancy in the Envelope function. Mostly, the GLM model just seems more generalized. This is because GLMs are not good at capturing non-linear responses, and we are assessing the effects of multiple variables that may have conflicting occupancy responses. since counts are considered 0 or 1, it may over-predict.
+the Random forests model predicts the least occupancy of all of them. trends of higher occupancy are harder to detect as all the points are more spread out. Random Forests makes occupancy predictions based on the most common resulting occupancy decision made by multiple regression trees; Thus, each point of occupancy is very specific to the input data without considering surrounding information.
+
+
+
+
+# Challenge 2 (4 points)
+
+When we fit our GLM in lab, we used background points, rather than true absence points, to represent pseudo-absences. Fit the exact same GLM model, only this time use presence and true absence data. That is, replace the background rows in the dataframe with rows that represent actual sites where surveys were completed but Varied Thrush were not detected. Once you've fit the GLM, build a new SDM from this fitted model and visually compare the prediction surface to that built based on the presence-background model. What discrepancies do you notice, and what is your intuition regarding which of these two models is more reliable?
+
+```{r}
+# GLMs
+
+vathValPresGLM = vathVal %>% filter(VATH==1)
+vathValAbsGLM = vathVal %>% filter(VATH==0)
+
+vathValXyGLM = as.matrix(vathVal %>% select(EASTING, NORTHING))
+vathValPresXyGLM = as.matrix(vathValPresGLM %>% select(EASTING, NORTHING))
+vathValAbsXyGLM = as.matrix(vathValAbsGLM %>% select(EASTING, NORTHING))
+
+
+presCovsGLM = extract(layers, vathValPresXyGLM)
+ABSCovsGLM = extract(layers, vathValAbsXyGLM)
+valCovsGLM = extract(layers, vathValXyGLM)
+
+presCovsGLM = data.frame(vathValPresXyGLM, presCovsGLM, pres=1)
+ABSCovsGLM = data.frame(vathValAbsXyGLM, ABSCovsGLM, pres=0)
+valCovsGLM = data.frame(vathValXyGLM, valCovsGLM)
+
+presABSCovsGLM = rbind(presCovsGLM, ABSCovsGLM)
+
+glmModelGLM = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presABSCovsGLM)
+glmMapGLM = predict(layers, glmModelGLM, type='response')
+
+par(mfrow = c(1, 2))
+plot(glmMap) 
+plot(glmMapGLM)
+```
+The GLM prediction based on simulated background points was fairly close to prediction by the GLM using abs data; however, there is definitesly a general overprediction in the distribution in the GLM based on background points except for along the upper right side where it did not predict as high of numbers as the GLM using absence data.
+
+
+# Challenge 3 (4 points)
+
+Now plot the relationship between the 4 explanatory variables and the predicted occupancy values based on the two fitted GLM models (presence-background and presence-absence). Recall that we did this in the latter part of our lab. Do you notice any differences in the covariate patterns between the two models? Does this help you interpret the discrepancies between the predicted surfaces from the two models?
+
+```{r}
+#ELEVATION
+  ELEVseq = seq(min(presBackCovs$elev, na.rm = TRUE), max(presBackCovs$elev, na.rm = TRUE), length.out = 100)
+  ELEVdata.seq = data.frame(elev = ELEVseq)
+  
+    # predict occupancy probabilities for GLM models using ELEVATION sequence
+    ELEVdata.seq$predPseudoAbsences = predict(glmModel, newdata = transform(ELEVdata.seq, canopy=mean(presBackCovs$canopy, na.rm=TRUE), mesic1km=mean(presBackCovs$mesic1km, na.rm=TRUE), precip=mean(presBackCovs$precip, na.rm=TRUE)), type = "response")
+    ELEVdata.seq$predTrueAbsences = predict(glmModelGLM, newdata = transform(ELEVdata.seq, canopy=mean(presABSCovsGLM$canopy, na.rm=TRUE), mesic1km=mean(presABSCovsGLM$mesic1km, na.rm=TRUE), precip=mean(presABSCovsGLM$precip, na.rm=TRUE)), type = "response")
+   #GENERATE PLOT
+    ELEVplot = ggplot(ELEVdata.seq, aes(x = elev)) +
+      geom_line(aes(y = predPseudoAbsences, colour = "Pseudo-Absences")) +
+      geom_line(aes(y = predTrueAbsences, colour = "True Absences")) +
+      scale_colour_manual(values = c("Pseudo-Absences" = "blue", "True Absences" = "orange"))+
+      ggtitle("Elevation")
+  
+###########
+# CANOPY
+  CANOPYseq = seq(min(presBackCovs$canopy, na.rm = TRUE), max(presBackCovs$canopy, na.rm = TRUE), length.out = 100)
+  CANOPYdata.seq = data.frame(canopy = CANOPYseq)
+  
+  # Predict occupancy probabilities for GLM models using CANOPY sequence
+    CANOPYdata.seq$predPseudoAbsences = predict(glmModel, newdata = transform(CANOPYdata.seq, elev=mean(presBackCovs$elev, na.rm=TRUE), mesic1km=mean(presBackCovs$mesic1km, na.rm=TRUE), precip=mean(presBackCovs$precip, na.rm=TRUE)), type = "response")
+    CANOPYdata.seq$predTrueAbsences = predict(glmModelGLM, newdata = transform(CANOPYdata.seq, elev=mean(presABSCovsGLM$elev, na.rm=TRUE), mesic1km=mean(presABSCovsGLM$mesic1km, na.rm=TRUE), precip=mean(presABSCovsGLM$precip, na.rm=TRUE)), type = "response")
+    #GENERATE PLOT
+    CANOPYplot = ggplot(CANOPYdata.seq, aes(x = canopy)) +
+      geom_line(aes(y = predPseudoAbsences, colour = "Pseudo-Absences")) +
+      geom_line(aes(y = predTrueAbsences, colour = "True Absences")) +
+      scale_colour_manual(values = c("Pseudo-Absences" = "blue", "True Absences" = "orange")) +
+      ggtitle("Canopy")
+    
+#############
+# MESIC1km
+  MESICseq = seq(min(presBackCovs$mesic1km, na.rm = TRUE), max(presBackCovs$mesic1km, na.rm = TRUE), length.out = 100)
+  MESICdata.seq = data.frame(mesic1km = MESICseq)
+  
+    #  Predict occupancy probabilities for GLM models using MESIC sequence
+    MESICdata.seq$predPseudoAbsences = predict(glmModel, newdata = transform(MESICdata.seq, elev=mean(presBackCovs$elev, na.rm=TRUE), canopy=mean(presBackCovs$canopy, na.rm=TRUE), precip=mean(presBackCovs$precip, na.rm=TRUE)), type = "response")
+    MESICdata.seq$predTrueAbsences = predict(glmModelGLM, newdata = transform(MESICdata.seq, elev=mean(presABSCovsGLM$elev, na.rm=TRUE), canopy=mean(presABSCovsGLM$canopy, na.rm=TRUE), precip=mean(presABSCovsGLM$precip, na.rm=TRUE)), type = "response")
+    #GENERATE PLOT
+  MESICplot = ggplot(MESICdata.seq, aes(x = mesic1km)) +
+    geom_line(aes(y = predPseudoAbsences, colour = "Pseudo-Absences")) +
+    geom_line(aes(y = predTrueAbsences, colour = "True Absences")) +
+    scale_colour_manual(values = c("Pseudo-Absences" = "blue", "True Absences" = "orange")) +
+    ggtitle("Mesic1km")
+
+
+############
+# PRECIP
+PRECIPseq = seq(min(presBackCovs$precip, na.rm = TRUE), max(presBackCovs$precip, na.rm = TRUE), length.out = 100)
+PRECIPdata.seq = data.frame(precip = PRECIPseq)
+
+# Predict occupancy probabilities using both GLM models for the sequence
+PRECIPdata.seq$predPseudoAbsences = predict(glmModel, newdata = transform(PRECIPdata.seq, elev=mean(presBackCovs$elev, na.rm=TRUE), mesic1km=mean(presBackCovs$mesic1km, na.rm=TRUE), canopy=mean(presBackCovs$canopy, na.rm=TRUE)), type = "response")
+PRECIPdata.seq$predTrueAbsences = predict(glmModelGLM, newdata = transform(PRECIPdata.seq, elev=mean(presABSCovsGLM$elev, na.rm=TRUE), mesic1km=mean(presABSCovsGLM$mesic1km, na.rm=TRUE), canopy=mean(presABSCovsGLM$canopy, na.rm=TRUE)), type = "response")
+  #GENERATE PLOT
+  PRECIPplot = ggplot(PRECIPdata.seq, aes(x = precip)) +
+    geom_line(aes(y = predPseudoAbsences, colour = "Pseudo-Absences")) +
+    geom_line(aes(y = predTrueAbsences, colour = "True Absences")) +
+    scale_colour_manual(values = c("Pseudo-Absences" = "blue", "True Absences" = "orange"))+
+    ggtitle("Precipitation")
+
+    
+##########################
+
+plot(ELEVplot) 
+plot(CANOPYplot)
+plot(MESICplot)
+plot(PRECIPplot)
+```
+the GLM using pseudo absences to predict distribtion generally underpredicted all covariates except for mesic which way underpredicted and then way overpredicted. this tracks with what we saw with the map, but this explains out really what metrics were different.
+
+___________________________________________________________________________________________________________________________
+
+# Challenge 4 (4 points)
+
+Varied Thrush are considered forest-dependent, and thus one might characterize mesic forests as "habitat" for the species. Calculate the (A)total amount of mesic forest in the study area, and (B)the mean size of the mesic forest patches.
+
+Using the SDM built from the random forest model, (A)convert the landscape into "habitat" and "non-habitat." To do this, choose a threshold value in your SDM and convert all cells with predicted outcomes greater than this threshold to 1 and all cells with predicted values below your threshold to 0. Justify your choice of your threshold value. 
+* (B)calculate the total amount of habitat and (C)mean size of habitat patches based on this new raster (i.e., create patches of "habitat" based on aggregations of cells you deemed 
+    1). How do the habitat amount and patch size values compare between the mesic forest approach and the SDM-based approach? In what situations might you rely on one map over the other?
+
+```{r}
+# Plot Mesic Forest
+MESICbinary = ifel(mesic == 1, 1, 0)
+plot(MESICbinary, main="Mesic Forest Habitat", col=c("white", "black"), legend=TRUE, axes=TRUE)
+  # Establish Mesic Forest Patches
+  MESICpatches = patches(MESICbinary, directions=8, zeroAsNA=T)
+  plot(MESICpatches, main="mesic habitat Patches", legend=TRUE)
+
+
+#(A) TOTAL amount of habitat (number of forest cells *cell area) (LAB4) (ALL ATTEMPTS TO USE LANDSCAPE METRICS RESULTED IN R COMPLETELEY CRASHING COMPUTER.  TOTAL LOSS OF PROGRESS. )
+  #number of forest cells (=1005425)
+  MESICforest = sum(values(mesic) == 1, na.rm = TRUE)
+  # area of a single cell
+  cellAREA = res(mesic)[1] * res(mesic)[2]  # Cell resolution (width 200m * height 200m)
+  
+  # total mesic forest area
+  totalMESICarea = MESICforest * cellAREA
+  totalMESICarea= totalMESICarea/1000 
+  totalMESICarea#(=40217000)
+  
+# (B)MEAN patch size
+  MESICpatch.area = table(values(MESICpatches))
+  MESICmean.patch = mean(MESICpatch.area * cellAREA)
+  MESICmean.patch #(=7490594)
+  
+#***************************************
+# (A)Plot Habitat Threshold above 0.5(aka 50%) & apply threshold to convert probabilities to binary habitat classification
+RFbinary = ifel(rfMap > 0.3, 1, 0)
+plot(RFbinary, main="Binary Random Forest Habitat Raster", col=c("white", "black"), legend=TRUE, axes=TRUE)
+
+#Identify habitat patches
+RF.HABITATpatches = patches(RFbinary, directions=8, zeroAsNA=T)
+plot(RF.HABITATpatches, main="Random Forest Habitat Patches", legend=FALSE)
+
+# (B)total habitat area(***LSM FROM LAB4 WOULD HAVE BEEN USEFUL)
+CELLareaRF = res(RFbinary)[1] * res(RFbinary)[2]
+totalRF.HABITATarea = (sum(values(RFbinary) == 1, na.rm = TRUE) * CELLareaRF)
+totalRF.HABITATarea= totalRF.HABITATarea/1000
+totalRF.HABITATarea #(=315480)
+
+# (C)Calculate mean patch size(***LSM FROM LAB4 WOULD HAVE BEEN USEFUL)
+PATCHareas = table(values(RF.HABITATpatches))
+MEAN.RFpatchsize = (mean(PATCHareas * CELLareaRF))
+MEAN.RFpatchsize #=(118068.9)
+```
+the generated values for total mesic forest area and mean mesic forest patches are significantly larger than those for the Random Forest model which makes occupancy predictions based on the most common resulting occupancy decision made by multiple regression trees; Thus, each point of occupancy is very specific to the input data without considering surrounding information.it makes sense for the random forests to be more specific; however, this degree of difference is surprising. probably has to do with selecting the threshold for 30% so only predicted values above 30% for cells that were counted as habitat. I initially did 50%, but there was an even steeper difference in the maps. I wanted to broaden the scope of 'habitat' I was looking at. using random forests and setting a threshold value allows you to be very discerning in what you want to consider 'habitat'
+
+
+
+
+___________________________________________________________________________________
+# Challenge 5 (4 points)
+
+When we fit the Maxent model in the lab, we used a regularization constant of 1. Fit the model two more times, using regularization (regmult) constants of 0.5 and 3. Construct figures showing the relationship between the 4 explanatory variables and the predicted outcome from these 3 fitted Maxent models. What is the regularization constant doing? Hint: you may need to Google it.
+
+```{r}
+
+######### 0.5
+pbVect = presBackCovs$pres
+covs = presBackCovs %>% select(canopy:precip)
+maxentModel0.5 = maxnet(p = pbVect,
+                     data= covs,
+                     regmult = 0.5,
+                     classes='lqpht')
+maxentMap0.5 = predictMaxNet(maxentModel0.5, layers, type='logistic')
+par(mfrow=c(1,2))
+plot(maxentModel0.5, type='logistic')
+plot(maxentMap0.5)
+
+####### 1
+pbVect = presBackCovs$pres
+covs = presBackCovs %>% select(canopy:precip)
+
+maxentModel = maxnet(p = pbVect,
+                     data= covs,
+                     regmult = 1,
+                     classes='lqpht')
+maxentMap = predictMaxNet(maxentModel, layers, type='logistic')
+par(mfrow=c(1,2))
+plot(maxentModel, type='logistic')
+plot(maxentMap)
+
+
+
+
+
+########### 3
+pbVect = presBackCovs$pres
+covs = presBackCovs %>% select(canopy:precip)
+maxentModel3 = maxnet(p = pbVect,
+                     data= covs,
+                     regmult = 3,
+                     classes='lqpht')
+maxentMap3 = predictMaxNet(maxentModel3, layers, type='logistic')
+par(mfrow=c(1,2))
+plot(maxentModel3, type='logistic')
+plot(maxentMap3)
+```
+Without googling the regularization constant, and while putting the constants in increasing order, the graphs of the four covariates appear to become more generalized. the maps had fewer areas that predicted no occupancy. After googling it, The Regularization Constant penalizes larger coefficients to reduce overfitting. Higher Regularization values increase Regularization(reducing overfitting), while lower values may increase risk of overfitting(not being as strict on overfitting). this makes sense with my initail observation, as the more extreme values became more normalized.
