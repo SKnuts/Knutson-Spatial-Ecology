@@ -1,0 +1,536 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r, warning=F, message=F}
+
+rm(list=ls())
+
+require(sf)
+require(tidyterra)
+require(dismo)
+require(tidyverse)
+require(terra)
+require(predicts)
+require(ggnewscale)
+require(mgcv)
+require(randomForest)
+require(maxnet)
+require(enmSdmX)
+require(gbm)
+require(PresenceAbsence)
+require(ecospat)
+```
+
+# This first code chunk just recreates the maps we built in the lab.
+
+```{r}
+
+# Model building data
+vathData = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_2004.csv')
+
+vathPres = vathData %>% filter(VATH==1)
+vathAbs = vathData %>% filter(VATH==0)
+
+vathPresXy = as.matrix(vathPres %>% select(EASTING, NORTHING))
+vathAbsXy = as.matrix(vathAbs %>% select(EASTING, NORTHING))
+
+
+
+# Validation data
+vathVal = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_VALIDATION.csv')
+
+vathValPres = vathVal %>% filter(VATH==1)
+vathValAbs = vathVal %>% filter(VATH==0)
+
+vathValXy = as.matrix(vathVal %>% select(EASTING, NORTHING))
+vathValPresXy = as.matrix(vathValPres %>% select(EASTING, NORTHING))
+vathValAbsXy = as.matrix(vathValAbs %>% select(EASTING, NORTHING))
+
+
+
+# Bringing in the covariates
+elev = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/elevation.tif')
+canopy = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/canopy.tif')
+mesic = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/mesic.tif')
+precip = rast('https://github.com/ValenteJJ/SpatialEcology/raw/main/Week8/precip.tif')
+
+
+# Resampling to make the covariate rasters match
+mesic = resample(x = mesic, y = elev, 'near')
+precip = resample(x = precip, y = elev, 'bilinear')
+
+mesic = mask(mesic, elev)
+precip = mask(precip, elev)
+
+# Mesic forest within 1 km
+probMatrix = focalMat(mesic, 1000, type='circle', fillNA=FALSE)
+mesic1km = focal(mesic, probMatrix, fun='sum')
+
+
+# Building the raster stack
+layers = c(canopy, elev, mesic1km, precip)
+names(layers) = c('canopy', 'elev', 'mesic1km', 'precip')
+
+
+#Creating background points
+set.seed(23)
+backXy = data.frame(backgroundSample(layers, n=2000, p=vathPresXy))
+
+# Extracting covariates for our different points
+presCovs = extract(layers, vathPresXy)
+backCovs = extract(layers, backXy)
+valCovs = extract(layers, vathValXy)
+
+presCovs = data.frame(vathPresXy, presCovs, pres=1)
+backCovs = data.frame(backXy, backCovs, pres=0)
+valCovs = data.frame(vathValXy, valCovs)
+
+presCovs = presCovs[complete.cases(presCovs),]
+backCovs = backCovs[complete.cases(backCovs),]
+
+# Combining presence and background data into one dataframe
+
+backCovs = backCovs %>% select(-ID)
+colnames(presCovs)[1:2] = c('x', 'y')
+presBackCovs = rbind(presCovs, backCovs)
+
+# Fitting bioclim envelope model
+tmp = presCovs %>% select(elev, precip, mesic1km, canopy) %>% 
+  as.matrix()
+
+bioclim = envelope(tmp)
+bioclimMap = predict(layers, bioclim)
+
+
+
+# Fitting GLM
+glmModel = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presBackCovs)
+glmMap = predict(layers, glmModel, type='response')
+
+
+# Fitting GAM
+gamModel = gam(pres ~ s(canopy, k=6) + s(elev, k=6) + s(mesic1km, k=6) + s(precip, k=6), family='binomial', data=presBackCovs, method='ML')
+gamMap = predict(layers, gamModel, type='response')
+
+
+# Fitting boosted regression tree model
+boostModel = gbm(pres ~ elev + canopy + mesic1km + precip, distribution='bernoulli', n.trees=100, interaction.depth=2, shrinkage=0.1, bag.fraction=0.5, data=presBackCovs)
+
+boostMap = predict(layers, boostModel, type='response')
+boostMap = mask(boostMap, layers$canopy)
+
+
+# Fitting random forest model
+rfModel = randomForest(as.factor(pres) ~ canopy + elev + mesic1km + precip, data=presBackCovs, mtry=2, ntree=500, na.action = na.omit)
+rfMap = predict(layers, rfModel, type='prob', index=2)
+
+
+#Fitting maxent model
+pbVect = presBackCovs$pres
+covs = presBackCovs %>% select(canopy:precip)
+maxentModel = maxnet(p = pbVect,
+                     data= covs,
+                     regmult = 1,
+                     classes='lqpht')
+
+
+maxentMap = predictMaxNet(maxentModel, layers, type='logistic')
+
+
+
+
+
+#______________________________________________________________________________
+#set the Dataframe
+tmp = valCovs %>% mutate(VATH = vathVal$VATH)
+tmp = tmp[complete.cases(tmp),]
+
+
+valData = data.frame('ID' = 1:nrow(tmp)) %>% 
+  mutate(obs = tmp$VATH,
+         bioVal = predict(bioclim, tmp %>% select(canopy:precip)),
+         glmVal = predict(glmModel, tmp %>% select(canopy:precip), type='response'),
+         gamVal = predict(gamModel, tmp %>% select(canopy:precip), type='response'),
+         boostVal = predict(boostModel, tmp %>% select(canopy:precip), type='response'),
+         rfVal = predict(rfModel, tmp %>% select(canopy:precip), type='prob')[,2],
+         maxentVal = predict(maxentModel, tmp %>% select(canopy:precip), type='logistic')[,1])
+
+
+
+#_________________________________________________________________________________
+###We're now going to apply several functions to this data frame and calculate AUC, sensitivity, specificity, TSS, Kappa, correlation, and log likelihood for each of the fitted models. From there, we can compare  
+
+summaryEval = data.frame(matrix(nrow=0, ncol=9))
+
+nModels = ncol(valData)-2
+
+#create a "four loop" to calulate AUC for each of the six models and include in summary data
+for(i in 1:nModels){
+  
+  #AUC (Area Under the CharacteristicCurve)
+  auc = auc(valData, which.model = i)
+  
+  #Find threshold to maximize Kappa. calculates optimal threshold value for creating predicted yes's and no's based on kappa statistic
+  kappaOpt = optimal.thresholds(valData, which.model = i, opt.methods=3)
+  
+  #Sensitivity
+  sens = sensitivity(cmx(valData, which.model=i, threshold = kappaOpt[[2]]))
+  
+  #Specificity
+  spec = specificity(cmx(valData, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #True skill statistic
+  tss = sens$sensitivity + spec$specificity - 1
+  
+  #Kappa
+  kappa = Kappa(cmx(valData, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #Correlation between predicted and realized values (doing this makes more sense if you are looking at abundance data)
+  corr = cor.test(valData[,2], valData[,i+2])$estimate
+  
+  #Log likelihood (lower value is less likely, higher value is more likely. looking for betas that result in p values that maximize liklihood.)
+  ll = sum(log(valData[,i+2]*valData[,2] + (1-valData[,i+2]) * (1-valData[,2])))
+  ll = ifelse(ll == '-Inf', sum(log(valData[,i+2] + 0.01)*valData[,2] + log((1-valData[,i+2]))*(1-valData[,2])), ll)
+  
+  #Put them all together and save the values
+  summaryI = c(i, auc$AUC, corr, ll, kappaOpt[[2]], sens$sensitivity, spec$specificity, tss, kappa[[1]])
+  summaryEval = rbind(summaryEval, summaryI)
+}
+
+summaryEval = summaryEval %>% 
+  setNames(c('model', 'auc', 'corr', 'll', 'threshold', 'sens', 'spec', 'tss', 'kappa')) %>% 
+  mutate(model = colnames(valData)[3:8])
+
+summaryEval
+```
+
+
+
+# Challenge 1 (4 points)
+
+In the lab, we fit 6 SDMs. We then calculated discrimination statistics for all 6 and a calibration plot for 1 of them. Create calibration plots for the remaining 5 models, and then make a decision (based on your suite of discrimination statistics and calibration plots) about which of your SDMs is "best." Defend your answer.
+
+```{r}
+
+calibration.plot(valData, which.model=1, N.bins=20, xlab='predicted', ylab='Observed', main='Bio')
+calibration.plot(valData, which.model=3, N.bins=20, xlab='predicted', ylab='Observed', main='Gam')
+calibration.plot(valData, which.model=4, N.bins=20, xlab='predicted', ylab='Observed', main='Boosted Regression')
+calibration.plot(valData, which.model=5, N.bins=20, xlab='predicted', ylab='Observed', main='Random Forest')
+calibration.plot(valData, which.model=6, N.bins=20, xlab='predicted', ylab='Observed', main='Max entropy')
+```
+Between the remaining 5 SDMs, the GAM model falls most consistently along the line of predicted values with only one significant outlier at about 0.3.
+
+
+
+# Challenge 2 (4 points)
+
+Each SDM we created uses a different algorithm with different assumptions. Because of this, ecologists frequently use "ensemble" approaches that aggregate predictions from multiple models in some way. Here we are going to create an ensemble model by calculating a weighted average of the predicted occupancy values at each pixel. We will calculate weights based on model AUC values to ensure that the models with the best AUC values have the most influence on the predicted values in the ensemble model.
+
+Create a raster stack that combines the glmMap, gamMap, boostMap, and rfMap (hint use c()).
+
+Next, create a vector of the AUC values for each model.
+
+Lastly, use the weighted.mean() function in the terra package to create the new raster as a weighted average of the previous 4 rasters.
+
+Plot the result, and explain why we left out the bioclim and Maxent models for this ensemble model.
+
+```{r}
+#create raster stack
+RASTstack = c(glmMap, gamMap, boostMap, rfMap)
+names(RASTstack) = c('glmMap', 'gamMap', 'boostMap', 'rfMap')
+RASTstack
+summaryEval
+plot(RASTstack)
+#create vector of AUC values from model ("c()" creates the vector, then you can just copy and paste the AUC values in order from summaryEval)
+AUCval= c(0.6726221, 0.6455923, 0.6403391, 0.6322577)
+
+#create new raster as a weighted average of the previous 4 rasters
+OMEGAraster= weighted.mean(RASTstack, AUCval, na.rm=FALSE)
+plot(OMEGAraster, main= "Weighted mean of pres-abs maps")
+view(OMEGAraster)
+```
+We left out bioclim and Maxent models because these use presence-background data and the others use presence-absence data. you can compare models among this datatype but not between the datatypes.
+
+
+
+# Challenge 3 (4 points)
+
+Is this ensemble model an improvement over one of the models you built previously? Provide evidence and explain the criteria you used to come to your conclusion.
+
+```{r}
+# Extract and create new back/pres/val datasets
+
+tmp = valCovs %>% mutate(VATH = vathVal$VATH)
+tmp = tmp[complete.cases(tmp),]
+
+newValcovs = valCovs[complete.cases(valCovs),]
+newValcovsXy = as.matrix(newValcovs %>% select(EASTING, NORTHING))
+
+OMEGAvaldata = valData[,1:2]
+OMEGAvaldata$OMEGAraster = extract(OMEGAraster, newValcovsXy)[,1]
+view(OMEGAvaldata)
+colnames(OMEGAvaldata)[3] = 'OMEGA raster'
+
+
+# discrimination stats for all models
+
+OMEGAvaldata = data.frame(matrix(nrow=0, ncol=9))
+OMEGAvaldata = ncol(OMEGAvaldata)-2
+
+for(i in 1:OMEGAvaldata){
+
+  #AUC
+  auc = auc(OMEGAvaldata, which.model = i)
+  
+  #Find threshold to maximize Kappa
+  kappaOpt = optimal.thresholds(OMEGAvaldata, which.model = i, opt.methods=3)
+  
+  #Sensitivity
+  sens = sensitivity(cmx(OMEGAvaldata, which.model=i, threshold = kappaOpt[[2]]))
+  
+  #Specificity
+  spec = specificity(cmx(OMEGAvaldata, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #True skill statistic
+  tss = sens$sensitivity + spec$specificity - 1
+  
+  #Kappa
+  kappa = Kappa(cmx(OMEGAvaldata, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #Correlation between predicted and realized values
+  corr = cor.test(OMEGAvaldata[,2], OMEGAvaldata[,i+2])$estimate
+  
+  #Log likelihood
+  ll = sum(log(OMEGAvaldata[,i+2]*OMEGAvaldata[,2] + (1-OMEGAvaldata[,i+2]) * (1-OMEGAvaldata[,2])))
+  ll = ifelse(ll == '-Inf', sum(log(OMEGAvaldata[,i+2] + 0.01)*OMEGAvaldata[,2] + log((1-OMEGAvaldata[,i+2]))*(1-OMEGAvaldata[,2])), ll)
+  
+  #Put them all together and save the values
+  summaryI = c(i, auc$AUC, corr, ll, kappaOpt[[2]], sens$sensitivity, spec$specificity, tss, kappa[[1]])
+  OMEGAsummaryEval = rbind(OMEGAsummaryEval, summaryI)
+}
+
+OMEGAsummaryEval = OMEGAsummaryEval %>% 
+  setNames(c('model', 'AUC', 'corr', 'll', 'threshold', 'sens', 'spec', 'tss', 'kappa'))
+
+OMEGAsummaryEval
+summaryEval
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+tmp = valCovs %>% mutate(VATH = valCovs$VATH)
+tmp = tmp[complete.cases(tmp),]
+VALdataOMEGA=valCovs[,1:2]
+THE=VALdataOMEGA$OMEGAraster=extract(OMEGAraster,vathValXy)
+#_________________________________________________________________________________
+###We're now going to apply several functions to this data frame and calculate AUC, sensitivity, specificity, TSS, Kappa, correlation, and log likelihood for each of the fitted models. From there, we can compare  
+rastmod = ncol(OMEGAraster)
+  #summaryEval = data.frame(matrix(nrow=0, ncol=9))
+  #AUC (Area Under the CharacteristicCurve)
+  auc = auc(THE, which.model = i)
+  
+  #Find threshold to maximize Kappa. calculates optimal threshold value for creating predicted yes's and no's based on kappa statistic
+  kappaOpt = optimal.thresholds(THE, which.model = i, opt.methods=3)
+
+  #Sensitivity
+  sens = sensitivity(cmx(THE, which.model=i, threshold = kappaOpt[[2]]))
+  
+  #Specificity
+  spec = specificity(cmx(THE, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #True skill statistic
+  tss = sens$sensitivity + spec$specificity - 1
+  
+  #Kappa
+  kappa = Kappa(cmx(THE, which.model = i, threshold = kappaOpt[[2]]))
+  
+  #Correlation between predicted and realized values (doing this makes more sense if you are looking at abundance data)
+  corr = cor.test(THE[,2], THE[,i+2])$estimate
+  
+  #Log likelihood (lower value is less likely, higher value is more likely. looking for betas that result in p values that maximize liklihood.)
+  ll = sum(log(THE[,i+2]*THE[,2] + (1-THE[,i+2]) * (1-THE[,2])))
+  ll = ifelse(ll == '-Inf', sum(log(THE[,i+2] + 0.01)*THE[,2] + log((1-THE[,i+2]))*(1-THE[,2])), ll)
+
+
+```
+
+Answer the question here.
+
+
+
+# Challenge 4 (4 points)
+
+In the lab we built models using presence-background data then validated those models with presence-absence data. For this challenge, you're going to compare the predictive ability of a model built using presence-background data with one built using presence-absence data.
+
+(A)Fit a GLM using the presence-background data as we did in the lab (i.e., use the presBackCovs dataframe). (B)Fit a second GLM using the presence-absence data (i.e., use the presAbsCovs dataframe). (C)Validate both of these models on the novel presence-absence data (valCovs dataset). Specifically, calculate and compare AUC, Kappa, and TSS for these two models.        Which model does a better job of prediction for the validation data and why do you think that is? 
+
+```{r}
+#just to make sure all the code is 'on the same page'
+     vathData = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_2004.csv')
+      vathPres = vathData %>% filter(VATH==1)
+      vathAbs = vathData %>% filter(VATH==0)
+      
+        vathPresXy = as.matrix(vathPres %>% select(EASTING, NORTHING))
+        vathAbsXy = as.matrix(vathAbs %>% select(EASTING, NORTHING))
+
+      # Building the raster stack
+      layers = c(canopy, elev, mesic1km, precip)
+      names(layers) = c('canopy', 'elev', 'mesic1km', 'precip')
+      
+      #Creating background points
+      set.seed(23)
+      backXy = data.frame(backgroundSample(layers, n=2000, p=vathPresXy))
+      
+     
+      # Extracting covariates for our different points
+      presCovs = extract(layers, vathPresXy)
+      backCovs = extract(layers, backXy)
+      valCovs = extract(layers, vathValXy)
+      absCovs = extract(layers,vathAbsXy)
+                        
+      presCovs = data.frame(vathPresXy, presCovs, pres=1)
+      backCovs = data.frame(backXy, backCovs, pres=0)
+      valCovs = data.frame(vathValXy, valCovs)
+      absCovs = data.frame(vathAbsXy,absCovs, pres=0)
+      
+      presCovs = presCovs[complete.cases(presCovs),]
+      backCovs = backCovs[complete.cases(backCovs),]
+      absCovs = absCovs[complete.cases(absCovs),]
+      # Combining presence and background data into one dataframe
+      backCovs = backCovs %>% select(-ID)
+      colnames(presCovs)[1:2] = c('x','y')
+      colnames(absCovs)[1:2] = c('x','y')
+      presBackCovs = rbind(presCovs, backCovs)
+      presAbsCovs=rbind(presCovs,absCovs)
+ #(A)Fit a GLM using presence-background data (LAB8/9)       
+    glmModelBack = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presBackCovs)
+    summary(glmModelBack)
+      glmMapBack = predict(layers, glmModelBack, type='response')
+      plot(glmMapBack)
+
+#(B)Fit a GLM using presence-absence data
+  glmModelAbs = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presAbsCovs)
+    summary(glmModelAbs)
+      glmMapAbs = predict(layers, glmModelAbs, type='response')
+      plot(glmMapAbs)
+    
+#(C)Validate models on novel presence-absence data(IE, the ValCovs dataset) by calculating and comparing AUC, Kappa, and TSS for both models
+    tmpA = valCovs %>% mutate(VATH = vathVal$VATH)
+    tmpA = tmp[complete.cases(tmpA),]
+         
+NEWval = data.frame('ID' = 1:nrow(tmpA)) %>% 
+  mutate(obs = tmp$VATH,
+         glmVal = predict(glmModelAbs, tmpA %>% select(canopy:precip), type='response'),
+         glmVal = predict(glmModelBack, tmpA %>% select(canopy:precip), type='response'))
+
+    newModels = ncol(NEWval)-2
+    
+    #create a "four loop" to calulate AUC for each of the six models and include in summary data
+    for(i in 1:newModels){
+      
+      #AUC (Area Under the CharacteristicCurve)
+      auc = auc(NEWval, which.model = i)
+      
+      #Find threshold to maximize Kappa. calculates optimal threshold value for creating predicted yes's and no's based on kappa statistic
+      kappaOpt = optimal.thresholds(NEWval, which.model = i, opt.methods=3)
+      
+          #Sensitivity
+          sens = sensitivity(cmx(NEWval, which.model=i, threshold = kappaOpt[[2]]))
+          
+          #Specificity
+          spec = specificity(cmx(NEWval, which.model = i, threshold = kappaOpt[[2]]))
+          
+      #True skill statistic
+      tss = sens$sensitivity + spec$specificity - 1
+      
+      #Kappa
+      kappa = Kappa(cmx(NEWval, which.model = i, threshold = kappaOpt[[2]]))
+      
+      
+      #Put them all together and save the values
+      summaryI = c( auc$AUC,kappaOpt[[2]], tss, kappa[[1]])
+      summaryEval = rbind(summaryEval, summaryI)}
+```
+
+Answer the question here.
+
+
+
+# Challenge 5 (4 points)
+
+Now calculate the same statistics (AUC, Kappa, and TSS) for each model you developed in Challenge 4 using K-fold validation with 5 groups. Do these models perform better or worse based on K-fold validation (as compared to validation based on novel data)? Why might that occur?
+
+```{r}
+  absCovs = as.matrix(absCovs %>% select(x, y))
+  backCovs = as.matrix(backCovs %>% select(x, y))
+
+glmModelBack = extract(layers, absCovs)
+glmModelAbs = extract(layers, backCovs)
+valCovs = extract(layers, vathValXy)
+
+glmModelAbs= data.frame(vathPresXy, glmModelAbs, pres=0)
+glmModelBack= data.frame(vathPresXy, glmModelBack, pres=0)
+
+set.seed(23)
+
+nFolds = 5
+kfoldAbs = kfold(glmModelAbs, k=nFolds)
+kfoldBack = kfold(glmModelBack, k=nFolds)
+
+         
+NEWval = data.frame('ID' = 1:nrow(tmpA)) %>% 
+  mutate(obs = tmp$VATH,
+         glmVal = predict(glmModelAbs, tmpA %>% select(canopy:precip), type='response'),
+         glmVal = predict(glmModelBack, tmpA %>% select(canopy:precip), type='response'))
+
+    newModels = ncol(NEWval)-2
+    
+    #create a "four loop" to calulate AUC for each of the six models and include in summary data
+    for(i in 1:newModels){
+      
+      #AUC (Area Under the CharacteristicCurve)
+      auc = auc(NEWval, which.model = i)
+      
+      #Find threshold to maximize Kappa. calculates optimal threshold value for creating predicted yes's and no's based on kappa statistic
+      kappaOpt = optimal.thresholds(NEWval, which.model = i, opt.methods=3)
+      
+          #Sensitivity
+          sens = sensitivity(cmx(NEWval, which.model=i, threshold = kappaOpt[[2]]))
+          
+          #Specificity
+          spec = specificity(cmx(NEWval, which.model = i, threshold = kappaOpt[[2]]))
+          
+      #True skill statistic
+      tss = sens$sensitivity + spec$specificity - 1
+      
+      #Kappa
+      kappa = Kappa(cmx(NEWval, which.model = i, threshold = kappaOpt[[2]]))
+      
+      
+      #Put them all together and save the values
+      summaryI = c( auc$AUC,kappaOpt[[2]], tss, kappa[[1]])
+      summaryEval = rbind(summaryEval, summaryI)}
+```
+
+Answer the question here.
