@@ -258,24 +258,7 @@ We left out bioclim and Maxent models because these use presence-background data
 # Challenge 3 (4 points)
 
 Is this ensemble model an improvement over one of the models you built previously? Provide evidence and explain the criteria you used to come to your conclusion.
-
-
 ```{r}
-valCovs
-```
-
-
-
-```{r}
-# Extract and create new back/pres/val datasets
-
-# tmp = valCovs %>% mutate(VATH = vathVal$VATH)
-# tmp = tmp[complete.cases(tmp),]
-
-# newValcovs = valCovs[complete.cases(valCovs),] %>% 
-#   select(EASTING, NORTHING)
-
-
 newValcovs = valCovs[complete.cases(valCovs),]
 newValcovs = newValcovs[,c('EASTING', 'NORTHING')]
 
@@ -292,11 +275,10 @@ OMEGAvaldata = valData %>%
 
 
 # discrimination stats for all models
-
 summaryOmega = data.frame(matrix(nrow=0, ncol=9))
 nModels = ncol(OMEGAvaldata)-2
 
-for(i in 1:nModels){
+for(i in 2:nModels){
 
   #AUC
   auc = auc(OMEGAvaldata, which.model = i)
@@ -332,67 +314,9 @@ summaryOmega = summaryOmega %>%
   setNames(c('model', 'AUC', 'corr', 'll', 'threshold', 'sens', 'spec', 'tss', 'kappa'))
 
 summaryOmega
-summaryEval
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-tmp = valCovs %>% mutate(VATH = valCovs$VATH)
-tmp = tmp[complete.cases(tmp),]
-VALdataOMEGA=valCovs[,1:2]
-THE=VALdataOMEGA$OMEGAraster=extract(OMEGAraster,vathValXy)
-#_________________________________________________________________________________
-###We're now going to apply several functions to this data frame and calculate AUC, sensitivity, specificity, TSS, Kappa, correlation, and log likelihood for each of the fitted models. From there, we can compare  
-rastmod = ncol(OMEGAraster)
-  #summaryEval = data.frame(matrix(nrow=0, ncol=9))
-  #AUC (Area Under the CharacteristicCurve)
-  auc = auc(THE, which.model = i)
-  
-  #Find threshold to maximize Kappa. calculates optimal threshold value for creating predicted yes's and no's based on kappa statistic
-  kappaOpt = optimal.thresholds(THE, which.model = i, opt.methods=3)
-
-  #Sensitivity
-  sens = sensitivity(cmx(THE, which.model=i, threshold = kappaOpt[[2]]))
-  
-  #Specificity
-  spec = specificity(cmx(THE, which.model = i, threshold = kappaOpt[[2]]))
-  
-  #True skill statistic
-  tss = sens$sensitivity + spec$specificity - 1
-  
-  #Kappa
-  kappa = Kappa(cmx(THE, which.model = i, threshold = kappaOpt[[2]]))
-  
-  #Correlation between predicted and realized values (doing this makes more sense if you are looking at abundance data)
-  corr = cor.test(THE[,2], THE[,i+2])$estimate
-  
-  #Log likelihood (lower value is less likely, higher value is more likely. looking for betas that result in p values that maximize liklihood.)
-  ll = sum(log(THE[,i+2]*THE[,2] + (1-THE[,i+2]) * (1-THE[,2])))
-  ll = ifelse(ll == '-Inf', sum(log(THE[,i+2] + 0.01)*THE[,2] + log((1-THE[,i+2]))*(1-THE[,2])), ll)
-
-
 ```
 
-Answer the question here.
+
 
 
 
@@ -403,22 +327,6 @@ In the lab we built models using presence-background data then validated those m
 (A)Fit a GLM using the presence-background data as we did in the lab (i.e., use the presBackCovs dataframe). (B)Fit a second GLM using the presence-absence data (i.e., use the presAbsCovs dataframe). (C)Validate both of these models on the novel presence-absence data (valCovs dataset). Specifically, calculate and compare AUC, Kappa, and TSS for these two models.        Which model does a better job of prediction for the validation data and why do you think that is? 
 
 ```{r}
-#just to make sure all the code is 'on the same page'
-     vathData = read.csv('https://raw.githubusercontent.com/ValenteJJ/SpatialEcology/main/Week8/vath_2004.csv')
-      vathPres = vathData %>% filter(VATH==1)
-      vathAbs = vathData %>% filter(VATH==0)
-      
-        vathPresXy = as.matrix(vathPres %>% select(EASTING, NORTHING))
-        vathAbsXy = as.matrix(vathAbs %>% select(EASTING, NORTHING))
-
-      # Building the raster stack
-      layers = c(canopy, elev, mesic1km, precip)
-      names(layers) = c('canopy', 'elev', 'mesic1km', 'precip')
-      
-      #Creating background points
-      set.seed(23)
-      backXy = data.frame(backgroundSample(layers, n=2000, p=vathPresXy))
-      
      
       # Extracting covariates for our different points
       presCovs = extract(layers, vathPresXy)
@@ -434,12 +342,14 @@ In the lab we built models using presence-background data then validated those m
       presCovs = presCovs[complete.cases(presCovs),]
       backCovs = backCovs[complete.cases(backCovs),]
       absCovs = absCovs[complete.cases(absCovs),]
+      
       # Combining presence and background data into one dataframe
       backCovs = backCovs %>% select(-ID)
       colnames(presCovs)[1:2] = c('x','y')
       colnames(absCovs)[1:2] = c('x','y')
       presBackCovs = rbind(presCovs, backCovs)
       presAbsCovs=rbind(presCovs,absCovs)
+      
  #(A)Fit a GLM using presence-background data (LAB8/9)       
     glmModelBack = glm(pres ~ canopy + elev + I(elev^2) + mesic1km + precip, family='binomial', data=presBackCovs)
     summary(glmModelBack)
@@ -457,11 +367,17 @@ In the lab we built models using presence-background data then validated those m
     tmpA = tmp[complete.cases(tmpA),]
          
 NEWval = data.frame('ID' = 1:nrow(tmpA)) %>% 
-  mutate(obs = tmp$VATH,
-         glmVal = predict(glmModelAbs, tmpA %>% select(canopy:precip), type='response'),
-         glmVal = predict(glmModelBack, tmpA %>% select(canopy:precip), type='response'))
+  mutate(obs = valData$obs,
+         glmValAbs = predict(glmModelAbs, tmpA %>% select(canopy:precip), type='response'),
+         glmValBack = predict(glmModelBack, tmpA %>% select(canopy:precip), type='response')) %>% 
+  filter(!is.na(glmValBack))
 
     newModels = ncol(NEWval)-2
+    
+  
+    
+  summaryEval2 = data.frame(matrix(nrow=0, ncol=9))
+
     
     #create a "four loop" to calulate AUC for each of the six models and include in summary data
     for(i in 1:newModels){
@@ -487,7 +403,7 @@ NEWval = data.frame('ID' = 1:nrow(tmpA)) %>%
       
       #Put them all together and save the values
       summaryI = c( auc$AUC,kappaOpt[[2]], tss, kappa[[1]])
-      summaryEval = rbind(summaryEval, summaryI)}
+      summaryEval2 = rbind(summaryEval, summaryI)}
 ```
 
 Answer the question here.
@@ -499,11 +415,11 @@ Answer the question here.
 Now calculate the same statistics (AUC, Kappa, and TSS) for each model you developed in Challenge 4 using K-fold validation with 5 groups. Do these models perform better or worse based on K-fold validation (as compared to validation based on novel data)? Why might that occur?
 
 ```{r}
-  absCovs = as.matrix(absCovs %>% select(x, y))
-  backCovs = as.matrix(backCovs %>% select(x, y))
+absCovs = as.matrix(absCovs %>% select(x, y))
+backCovs = as.matrix(backCovs %>% select(x, y))
 
-glmModelBack = extract(layers, absCovs)
-glmModelAbs = extract(layers, backCovs)
+glmModelBack = extract(layers, backCovs)
+glmModelAbs = extract(layers, absCovs)
 valCovs = extract(layers, vathValXy)
 
 glmModelAbs= data.frame(vathPresXy, glmModelAbs, pres=0)
@@ -550,4 +466,4 @@ NEWval = data.frame('ID' = 1:nrow(tmpA)) %>%
       summaryEval = rbind(summaryEval, summaryI)}
 ```
 
-Answer the question here.
+validation incest. you are not actually validating your SDM because you are internally validating.
