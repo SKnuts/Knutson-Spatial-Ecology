@@ -259,27 +259,44 @@ We left out bioclim and Maxent models because these use presence-background data
 
 Is this ensemble model an improvement over one of the models you built previously? Provide evidence and explain the criteria you used to come to your conclusion.
 
+
+```{r}
+valCovs
+```
+
+
+
 ```{r}
 # Extract and create new back/pres/val datasets
 
-tmp = valCovs %>% mutate(VATH = vathVal$VATH)
-tmp = tmp[complete.cases(tmp),]
+# tmp = valCovs %>% mutate(VATH = vathVal$VATH)
+# tmp = tmp[complete.cases(tmp),]
+
+# newValcovs = valCovs[complete.cases(valCovs),] %>% 
+#   select(EASTING, NORTHING)
+
 
 newValcovs = valCovs[complete.cases(valCovs),]
+newValcovs = newValcovs[,c('EASTING', 'NORTHING')]
+
 newValcovsXy = as.matrix(newValcovs %>% select(EASTING, NORTHING))
 
-OMEGAvaldata = valData[,1:2]
-OMEGAvaldata$OMEGAraster = extract(OMEGAraster, newValcovsXy)[,1]
-view(OMEGAvaldata)
-colnames(OMEGAvaldata)[3] = 'OMEGA raster'
+
+newValcovs = newValcovs %>% 
+  mutate(predVals = extract(OMEGAraster, newValcovsXy)[,1])
+
+
+OMEGAvaldata = valData %>% 
+  mutate(ensemble = newValcovs$predVals) %>% 
+  select(-bioVal, -maxentVal)
 
 
 # discrimination stats for all models
 
-OMEGAvaldata = data.frame(matrix(nrow=0, ncol=9))
-OMEGAvaldata = ncol(OMEGAvaldata)-2
+summaryOmega = data.frame(matrix(nrow=0, ncol=9))
+nModels = ncol(OMEGAvaldata)-2
 
-for(i in 1:OMEGAvaldata){
+for(i in 1:nModels){
 
   #AUC
   auc = auc(OMEGAvaldata, which.model = i)
@@ -308,13 +325,13 @@ for(i in 1:OMEGAvaldata){
   
   #Put them all together and save the values
   summaryI = c(i, auc$AUC, corr, ll, kappaOpt[[2]], sens$sensitivity, spec$specificity, tss, kappa[[1]])
-  OMEGAsummaryEval = rbind(OMEGAsummaryEval, summaryI)
+  summaryOmega = rbind(summaryOmega, summaryI)
 }
 
-OMEGAsummaryEval = OMEGAsummaryEval %>% 
+summaryOmega = summaryOmega %>% 
   setNames(c('model', 'AUC', 'corr', 'll', 'threshold', 'sens', 'spec', 'tss', 'kappa'))
 
-OMEGAsummaryEval
+summaryOmega
 summaryEval
 
 
