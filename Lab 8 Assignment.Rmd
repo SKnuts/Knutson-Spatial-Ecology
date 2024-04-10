@@ -123,6 +123,7 @@ the GLM model in comparison to the other two seems to predict much higher occupa
 the Random forests model predicts the least occupancy of all of them. trends of higher occupancy are harder to detect as all the points are more spread out. Random Forests makes occupancy predictions based on the most common resulting occupancy decision made by multiple regression trees; Thus, each point of occupancy is very specific to the input data without considering surrounding information.
 
 
+$\color{red}{\text{Good. Also note the differences in the scales. +3.5}}$
 
 
 # Challenge 2 (4 points)
@@ -158,6 +159,9 @@ plot(glmMap)
 plot(glmMapGLM)
 ```
 The GLM prediction based on simulated background points was fairly close to prediction by the GLM using abs data; however, there is definitesly a general overprediction in the distribution in the GLM based on background points except for along the upper right side where it did not predict as high of numbers as the GLM using absence data.
+
+$\color{red}{\text{Again, note the differences in the scales. What's your intuition about what to trust here? +2.5}}$
+
 
 
 # Challenge 3 (4 points)
@@ -235,6 +239,9 @@ plot(PRECIPplot)
 ```
 the GLM using pseudo absences to predict distribtion generally underpredicted all covariates except for mesic which way underpredicted and then way overpredicted. this tracks with what we saw with the map, but this explains out really what metrics were different.
 
+$\color{red}{\text{There is something incorrect about your code here. You should be seeing higher predicted values for the true absence model in all of the figures due to the smaller number of absence points compared to background points. I don't have the time right now to go through and figure out the coding issue, but come talk to me if you'd like to work through it. +3}}$
+
+
 ___________________________________________________________________________________________________________________________
 
 # Challenge 4 (4 points)
@@ -292,6 +299,7 @@ MEAN.RFpatchsize #=(118068.9)
 ```
 the generated values for total mesic forest area and mean mesic forest patches are significantly larger than those for the Random Forest model which makes occupancy predictions based on the most common resulting occupancy decision made by multiple regression trees; Thus, each point of occupancy is very specific to the input data without considering surrounding information.it makes sense for the random forests to be more specific; however, this degree of difference is surprising. probably has to do with selecting the threshold for 30% so only predicted values above 30% for cells that were counted as habitat. I initially did 50%, but there was an even steeper difference in the maps. I wanted to broaden the scope of 'habitat' I was looking at. using random forests and setting a threshold value allows you to be very discerning in what you want to consider 'habitat'
 
+$\color{red}{\text{Again, something about your code is off. Your patch sizes for the RF model should be much smaller. Let me know if you want to chat about it. +3}}$
 
 
 
@@ -344,3 +352,5 @@ plot(maxentModel3, type='logistic')
 plot(maxentMap3)
 ```
 Without googling the regularization constant, and while putting the constants in increasing order, the graphs of the four covariates appear to become more generalized. the maps had fewer areas that predicted no occupancy. After googling it, The Regularization Constant penalizes larger coefficients to reduce overfitting. Higher Regularization values increase Regularization(reducing overfitting), while lower values may increase risk of overfitting(not being as strict on overfitting). this makes sense with my initail observation, as the more extreme values became more normalized.
+
+$\color{red}{\text{Nice. +4}}$
