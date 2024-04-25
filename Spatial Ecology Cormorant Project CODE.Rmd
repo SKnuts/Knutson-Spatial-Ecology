@@ -1,0 +1,94 @@
+---
+title: "SpatialEco_Cormorant_Project"
+author: "Sarah Knutson"
+date: "2024-04-15"
+output: html_document
+---
+
+```{r setup}
+# remove.packages("lme4")
+# remove.packages("Matrix")
+# #install.packages("Matrix")
+# install.packages("lme4")
+require(lme4)
+require(ncf)
+require(tidyverse)
+require(spdep)
+
+
+
+BirdData=read.csv('https://raw.githubusercontent.com/SKnuts/Knutson-Spatial-Ecology/main/SpatECO_proj_DATA_CSVUSE.csv')
+head(BirdData) 
+```
+
+
+```{r Fit the Model}
+#PresenceAbsence as a function of Roost distance to pond plus Pond area plus random effect of FarmNum
+PresAbs_FullModel = glmer(PresAbs ~ PondRoost_Dist + PondArea + (1 | FarmNum), data = BirdData, family = binomial)
+summary(PresAbs_FullModel)
+```
+
+
+```{r evaluate spatial dependence in the raw data}
+
+#First, we will need to identify the appropriate binsize and distance
+    Coordinates = cbind(BirdData$PondLong, BirdData$PondLat)
+    distMat = as.matrix(dist(Coordinates))
+    maxDist = (2/3) * max(distMat)
+    maxDist
+  
+    
+# Second, we make the correlelogram function
+icorrelogram <- function(locations,z, binsize, maxdist){
+  
+  distbin <- seq(0,maxdist,by=binsize)
+  Nbin <- length(distbin)-1
+  moran.results <- data.frame("dist"= rep(NA,Nbin), "Morans.i"=NA,"null.lower"=NA, "null.upper"=NA)
+  
+  for (i in 1:Nbin){
+    d.start<-distbin[i] 
+    d.end<-distbin[i+1]
+    neigh <- dnearneigh(x=locations, d1=d.start, d.end, longlat=F)
+    wts <- nb2listw(neighbours=neigh, style='B', zero.policy=T)
+    mor.i <- moran.mc(x=z, listw=wts, nsim=200, alternative="greater", zero.policy=T)  #note alternative is for P-value, so only 'significant if positive autocorrelation
+    
+    moran.results[i, "dist"]<-(d.end+d.start)/2 
+    moran.results[i, "Morans.i"]<-mor.i$statistic 								                #observed moran's i
+    moran.results[i, "null.lower"]<-quantile(mor.i$res, probs = 0.025,na.rm = T)#95% null envelope	
+    moran.results[i, "null.upper"]<-quantile(mor.i$res, probs = 0.975,na.rm = T)#95% null envelope
+  }
+  return(moran.results)
+}
+#Third, Fit the Correlogram
+    correlogram = icorrelogram(locations=cbind(BirdData$PondLong, BirdData$PondLat), z=BirdData$PresAbs, binsize=2500, maxdist=100275.7)
+    head(correlogram)
+    
+    ggplot(correlogram, aes(x=dist, y=Morans.i))+
+      geom_line()+
+      geom_point()+
+      ylim(-0.5, 0.5)+
+      theme_bw()+
+      geom_hline(yintercept=0, color='red', linetype='dashed')+
+      geom_line(aes(y=null.lower), linetype='dashed')+
+      geom_line(aes(y=null.upper), linetype='dashed')
+```
+
+```{r evaluate for spatial autocorrelation in the residuals of the model }
+RESIDUALS = residuals(PresAbs_FullModel, type='deviance')
+
+CorrelogramResiduals = icorrelogram(locations=cbind(BirdData$PondLong, BirdData$PondLat), z=RESIDUALS, binsize=2500, maxdist=100275.7)
+
+ggplot(CorrelogramResiduals, aes(x=dist, y=Morans.i))+
+  geom_line()+
+  geom_point()+
+  ylim(-0.5, 0.5)+
+  theme_bw()+
+  geom_hline(yintercept=0, color='red', linetype='dashed')+
+  geom_line(aes(y=null.lower), linetype='dashed',color='blue')+
+  geom_line(aes(y=null.upper), linetype='dashed',color='blue')
+  # xlab = "Distance (m)"
+
+```
+It looks like there is not really any spatial autocorrelation left after fitting he model with pond size and roost distance as an effect.
+
+
