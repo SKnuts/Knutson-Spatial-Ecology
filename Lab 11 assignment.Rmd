@@ -134,7 +134,7 @@ The exponentiated coefficients of the logistic regression describe the odds of u
 
 The Manly statistic more directly measures the direction and strength of the association between probability of occupancy and landcover type. All values are positive, which means that as the amount of that landcover increases, the probablility of occupancy increases, which makes sense given that the data were collected from radiocollar-collected location data. about half of the values are below 1, which indicates a weak association, with Urban (0.08) being the weakest. the other values are above 1, with the larger values indicating a stronger association. here, Cypress Swamp has the probability of occupancy. the Linear regression predicted that Upland Forest would have strongest odds of occupancy. both models indicated that urban and open water have very low occupancy probability.
 
-
+$\color{red}{\text{Pretty good. Basically, the exponentiated beta coefficients represent the odds ratios for the various cover types (i.e., the odds a point in that category is used divided by the odds is is not used). This is the same way that wi is calculated. The only difference here is that we're now including a random effect to account for non-independence among points selected by the same panther. +4}}$
 
 
 
@@ -192,6 +192,8 @@ In the lab, we used the distribution of step lengths and turning angles to help 
 hist(ALLspeed, main = "Panther Speeds", xlab = "Speed (km/hr)")
 ```
 (B)when sampling from step lengths, you assume that the animal went in a linear fashion from point a to point b; however, this is often not the case, especially for a highly mobile animal like a bird. while calculating speed also assumes linear distance since you need distance traveled to calculate speed,they tell about different aspects of animal movement. this could be particularly useful for migratory species. Migrating whales in particular come to mind. you can find distance and speed of travel and can extrapolate to figure out how long until they reach their destination(if known). at the end of the day, it depends on what your research question is.
+
+$\color{red}{\text{What I was looking for is that speeds can be used to create a pool of potential steps even when the time between fixes isn't constant. +4}}$
 
 ############################################################################################
 # Challenge 3 (5 points)
@@ -253,6 +255,8 @@ print(straight)
 ```
 length of path (straight line between endpoints) divided by the actual distance traveled means that a larger number is a more straight path. therefore, Panther 6 had the most straight path (such a goal-oriented queen) and panther one had the most winding path (that's okay too, king, we cant all be expected to know what we want in life right away).
 
+$\color{red}{\text{Both correct and wise. +5}}$
+
 
 
 #####################################################################################################################
@@ -301,3 +305,5 @@ plot(STRAIGHTNESSvPPD[c(1,2)], main="Path Straightness Value per Panther")
 ```
 
 as the number of points per day increases, the path straightness generally increases with these panthers. I think we would need more panther data to draw a generalization. since path straightness is essentially the ratio of the straight-line distance between each panther's start and end points to the sum of all step distances (between each point)along the path of each panther. each step is the straight line distance between the points, thus adding more points can increase or decrease the  calculated path straightness depending on the straight line distance between endpoints and the total length of time.
+
+$\color{red}{\text{Close enough. This was a poor question on my part. +5}}$
