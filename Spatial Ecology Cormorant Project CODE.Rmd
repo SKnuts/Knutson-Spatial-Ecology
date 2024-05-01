@@ -26,6 +26,7 @@ head(BirdData)
 #PresenceAbsence as a function of Roost distance to pond plus Pond area plus random effect of FarmNum
 PresAbs_FullModel = glmer(PresAbs ~ PondRoost_Dist + PondArea + (1 | FarmNum), data = BirdData, family = binomial)
 summary(PresAbs_FullModel)
+# confint(PresAbs_FullModel)for some reason this gives a 2-mile long error
 ```
 
 
@@ -59,7 +60,7 @@ icorrelogram <- function(locations,z, binsize, maxdist){
   }
   return(moran.results)
 }
-#Third, Fit the Correlogram
+#Third, Fit the Correlogram with raw data 
     correlogram = icorrelogram(locations=cbind(BirdData$PondLong, BirdData$PondLat), z=BirdData$PresAbs, binsize=2500, maxdist=100275.7)
     head(correlogram)
     
@@ -74,6 +75,7 @@ icorrelogram <- function(locations,z, binsize, maxdist){
 ```
 
 ```{r evaluate for spatial autocorrelation in the residuals of the model }
+#fit correleogram for the residuals of the GLMER model
 RESIDUALS = residuals(PresAbs_FullModel, type='deviance')
 
 CorrelogramResiduals = icorrelogram(locations=cbind(BirdData$PondLong, BirdData$PondLat), z=RESIDUALS, binsize=2500, maxdist=100275.7)
@@ -87,7 +89,7 @@ ggplot(CorrelogramResiduals, aes(x=dist, y=Morans.i))+
   geom_line(aes(y=null.lower), linetype='dashed',color='blue')+
   geom_line(aes(y=null.upper), linetype='dashed',color='blue')
   # xlab = "Distance (m)"
-
+ help("residuals")
 ```
 It looks like there is not really any spatial autocorrelation left after fitting he model with pond size and roost distance as an effect.
 
